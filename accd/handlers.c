@@ -935,8 +935,7 @@ h_chat(struct Server *s, struct Conn *c,
 	 * AC2 client outbound 0x2a wire (FUN_14352d760 + FUN_143461160 +
 	 * trailing i32 from param_1+0x650):
 	 *   u8  0x2a
-	 *   str_a text         (single string; max 35 codepoints per
-	 *                       kunos's FUN_1400142f0 case 0x2a)
+	 *   str_a text         (single string, u8 code point count)
 	 *   i32 client_ts_ms   (echoed verbatim in the relayed 0x2b)
 	 *
 	 * Sender is server-side: the per-car driver name resolved from
@@ -989,7 +988,13 @@ h_chat(struct Server *s, struct Conn *c,
 	}
 	handled = chat_process(s, c, text);
 	if (handled == 0) {
-		/* Relay the full protocol-bounded text; do not truncate player chat. */
+		/*
+		 * Relay the message as received. The exe does not cap it:
+		 * the 0x23 that FUN_1400142f0 passes to FUN_140020700 is
+		 * the 35 code point limit on the sender name built from
+		 * the DriverInfo, and FUN_140033030 writes the message
+		 * bounded only by its u8 count.
+		 */
 		bb_init(&out);
 		/*
 		 * chat_type=0 is the regular driver-to-driver lane that
