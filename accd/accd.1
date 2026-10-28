@@ -252,6 +252,22 @@ When present and
 is set in
 .Pa entrylist.json ,
 only listed drivers may connect.
+.It Pa bop.json
+Optional.
+Per track and car model ballast and restrictor.
+Each time a car joins, every line whose
+.Dq track
+and
+.Dq carModel
+match the event track and the car is added to the car's
+.Pa entrylist.json
+values.
+.Dq ballastKg
+is in kg and clamped to \-40\(en40,
+.Dq restrictor
+is in percent and clamped to 0\(en20; the sum is clamped to the same
+ranges.
+A line naming an unknown track is ignored with a warning.
 .It Pa weatherRules.json
 Optional.
 Weekend-weather constraints.
@@ -321,9 +337,9 @@ Clear all penalties.
 .It /cleartp Ar car#
 Clear time penalties for a car.
 .It /ballast Ar car# Ar kg
-Set ballast (\-40\(en40 kg).
+Set ballast (\-40\(en40 kg) until the car rejoins.
 .It /restrictor Ar car# Ar pct
-Set restrictor (0\(en20%).
+Set restrictor (0\(en20%) until the car rejoins.
 .It /track Ar name
 Change track for next session.  An unknown
 .Ar name
@@ -405,6 +421,8 @@ Server identity and access control.
 Track, weather, and session schedule.
 .It Pa cfg/entrylist.json
 Optional entry list for pre-assigned slots.
+.It Pa cfg/bop.json
+Optional per track and car model ballast and restrictor.
 .It Pa cfg/weatherRules.json
 Optional weekend-weather constraints applied on a weekend reset.
 .It Pa cfg/banlist.txt

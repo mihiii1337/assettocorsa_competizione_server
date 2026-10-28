@@ -253,7 +253,8 @@ entrylist_load(struct Server *s, const char *cfg_dir)
 			int kg = json_obj_get_int(e, "ballastKg", 0);
 			if (kg < -40) kg = -40;
 			if (kg > 40) kg = 40;
-			car->ballast_kg = (int8_t)kg;
+			car->base_ballast_kg = (int8_t)kg;
+			car->ballast_kg = car->base_ballast_kg;
 		}
 		{
 			/*
@@ -266,7 +267,8 @@ entrylist_load(struct Server *s, const char *cfg_dir)
 			int rest = json_obj_get_int(e, "restrictor", 0);
 			if (rest < 0) rest = 0;
 			if (rest > 20) rest = 20;
-			car->restrictor = (float)rest * 0.01f;
+			car->base_restrictor = (float)rest * 0.01f;
+			car->restrictor = car->base_restrictor;
 		}
 		{
 			int ddi = json_obj_get_int(e, "defaultDriverIndex", 0);
@@ -414,6 +416,8 @@ entrylist_load(struct Server *s, const char *cfg_dir)
 				    anchor->default_grid_position;
 				c->ballast_kg = anchor->ballast_kg;
 				c->restrictor = anchor->restrictor;
+				c->base_ballast_kg = anchor->base_ballast_kg;
+				c->base_restrictor = anchor->base_restrictor;
 				memcpy(c->custom_car, anchor->custom_car,
 				    sizeof(c->custom_car));
 				c->current_driver_index =
@@ -527,10 +531,15 @@ entrylist_save(const struct Server *s, const char *cfg_dir)
 		fprintf(fp, "      \"defaultGridPosition\": %d,\n",
 		    car->default_grid_position < 0 ? 0
 		    : car->default_grid_position + 1);
+		/*
+		 * The entrylist values, not the live ones: bop.json and
+		 * admin commands would otherwise be folded into the file
+		 * and applied again on the next load.
+		 */
 		fprintf(fp, "      \"ballastKg\": %d,\n",
-		    (int)car->ballast_kg);
+		    (int)car->base_ballast_kg);
 		fprintf(fp, "      \"restrictor\": %d,\n",
-		    (int)(car->restrictor * 100.0f + 0.5f));
+		    (int)(car->base_restrictor * 100.0f + 0.5f));
 		fprintf(fp, "      \"defaultDriverIndex\": %d,\n",
 		    (int)car->current_driver_index);
 		json_escape(buf, sizeof(buf), car->team_name);
@@ -575,10 +584,9 @@ entrylist_save(const struct Server *s, const char *cfg_dir)
 }
 
 /*
- * Load + range-clamp + log cfg/bop.json.  The table is NOT applied to
- * any car: the original server likewise only loads, clamps, and logs
- * its BoP vector and never writes it to a CarEntry (the applier was
- * never wired up).  Kept for forward-compat and operator visibility.
+ * Load, range-clamp and log cfg/bop.json (FUN_140023700). A line
+ * whose track is not a known track name can never match the server
+ * track and is dropped with the same warning the exe prints.
  */
 int
 bop_load(struct Server *s, const char *cfg_dir)
@@ -634,13 +642,55 @@ bop_load(struct Server *s, const char *cfg_dir)
 			rest = 0;
 		if (rest > 20)
 			rest = 20;
+		log_info("bop: carmodel %d B:%d|R:%d for track %s",
+		    model, kg, rest, tname);
+		if (!track_known(tname)) {
+			log_warn("Track %s doesn't exist, BoP line is ignored",
+			    tname);
+			continue;
+		}
 		out = &s->bop[s->bop_count++];
 		snprintf(out->track, sizeof(out->track), "%s", tname);
 		out->car_model = (uint8_t)model;
 		out->ballast_kg = (int8_t)kg;
-		out->restrictor_pct = (uint8_t)rest;
+		out->restrictor = (float)rest * 0.01f;
 	}
 	json_free(root);
 	log_info("bop.json: %d entries loaded", s->bop_count);
 	return s->bop_count;
+}
+
+/*
+ * Set the live BoP of a car that is joining: its entrylist values plus
+ * every bop.json line for the server track and the car's model, with
+ * the sum clamped to [-40, 40] kg and [0, 20] % (FUN_140025690). The
+ * exe works this out again on every join, reconnects included, so the
+ * lines never add up twice and an admin /ballast or /restrictor lasts
+ * only until the car rejoins.
+ */
+void
+bop_apply(const struct Server *s, struct CarEntry *car)
+{
+	const struct BoPEntry *b;
+	float rest;
+	int i, kg;
+
+	kg = car->base_ballast_kg;
+	rest = car->base_restrictor;
+	for (i = 0; i < s->bop_count; i++) {
+		b = &s->bop[i];
+		if (b->car_model != car->car_model ||
+		    strcmp(b->track, s->track) != 0)
+			continue;
+		kg += b->ballast_kg;
+		rest += b->restrictor;
+	}
+	if (kg < -40)
+		kg = -40;
+	if (kg > 40)
+		kg = 40;
+	if (rest > 0.2f)
+		rest = 0.2f;
+	car->ballast_kg = (int8_t)kg;
+	car->restrictor = rest;
 }

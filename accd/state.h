@@ -741,9 +741,15 @@ struct CarEntry {
 						 * each join; the spawnDef
 						 * sends it +1 as the client's
 						 * pitNumber */
-	int8_t		ballast_kg;		/* kg; /ballast admin clamps
-						 * -40..40 per exe FUN_14001dae0 */
-	float		restrictor;		/* normalized 0..0.20 */
+	int8_t		ballast_kg;		/* live kg, -40..40: base plus
+						 * bop.json on each join, or
+						 * the admin /ballast value
+						 * until the car rejoins */
+	float		restrictor;		/* live fraction 0..0.20, set
+						 * like ballast_kg */
+	int8_t		base_ballast_kg;	/* entrylist ballastKg; 0 for
+						 * a car made by a join */
+	float		base_restrictor;	/* entrylist restrictor */
 	char		custom_car[64];		/* entrylist customCar
 						 * filename (handbook §VI.2);
 						 * stored for round-trip and
@@ -1256,18 +1262,17 @@ struct Server {
 
 	/*
 	 * Per (track, carModel) BoP ballast / restrictor loaded from
-	 * cfg/bop.json (handbook VI.3).  Parsed, clamped and logged for
-	 * operator visibility but NOT applied to any car -- this matches
-	 * the exe, which likewise loads bop.json into a vector it never
-	 * reads back onto a car (verified 2026-06-13).  Up to ACC_MAX_BOP
-	 * entries; unused slots zero-initialised.
+	 * cfg/bop.json (handbook VI.3). On every join each line for the
+	 * server track and the car's model is added to the car's
+	 * entrylist values (bop_apply). Lines naming an unknown track
+	 * are dropped at load. Up to ACC_MAX_BOP entries.
 	 */
 #define ACC_MAX_BOP 256
 	struct BoPEntry {
 		char		track[ACC_TRACK_NAME_LEN];
 		uint8_t		car_model;
 		int8_t		ballast_kg;	/* kg, clamped [-40, 40] */
-		uint8_t		restrictor_pct;
+		float		restrictor;	/* fraction, clamped [0, 0.20] */
 	} bop[ACC_MAX_BOP];
 	int			bop_count;
 	char			cfg_dir[256];	/* for saving bans */
@@ -1337,6 +1342,7 @@ void	server_free(struct Server *s);
  */
 void	track_zones_apply(struct Server *s);
 int	track_pit_count(const char *track, int is_private);
+int	track_known(const char *track);
 void	track_random_pick(struct Server *s);
 int64_t	conn_clock_offset(const struct Server *s, const struct Conn *c);
 

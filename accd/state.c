@@ -134,24 +134,32 @@ static const struct TrackZones track_zones[] = {
 	{"spa",             0.9048780f, 0.1000000f, 0.1155060f,  82,  82},
 };
 
-void
-track_zones_apply(struct Server *s)
+static const struct TrackZones *
+track_find(const char *track)
 {
 	size_t i;
 
-	for (i = 0; i < sizeof(track_zones) / sizeof(track_zones[0]); i++) {
-		if (strcmp(s->track, track_zones[i].name) == 0) {
-			s->formation_trigger_start =
-			    track_zones[i].formation_start;
-			s->green_trigger_start = track_zones[i].green_start;
-			s->green_trigger_end = track_zones[i].green_end;
-			log_info("track zones: %s formation=%.4f "
-			    "green=[%.4f, %.4f]", s->track,
-			    (double)s->formation_trigger_start,
-			    (double)s->green_trigger_start,
-			    (double)s->green_trigger_end);
-			return;
-		}
+	for (i = 0; i < sizeof(track_zones) / sizeof(track_zones[0]); i++)
+		if (strcmp(track, track_zones[i].name) == 0)
+			return &track_zones[i];
+	return NULL;
+}
+
+void
+track_zones_apply(struct Server *s)
+{
+	const struct TrackZones *tz;
+
+	if ((tz = track_find(s->track)) != NULL) {
+		s->formation_trigger_start = tz->formation_start;
+		s->green_trigger_start = tz->green_start;
+		s->green_trigger_end = tz->green_end;
+		log_info("track zones: %s formation=%.4f "
+		    "green=[%.4f, %.4f]", s->track,
+		    (double)s->formation_trigger_start,
+		    (double)s->green_trigger_start,
+		    (double)s->green_trigger_end);
+		return;
 	}
 	log_info("track zones: %s not in per-track table — using "
 	    "defaults %.3f / %.3f / %.3f", s->track,
@@ -170,14 +178,21 @@ track_zones_apply(struct Server *s)
 int
 track_pit_count(const char *track, int is_private)
 {
-	size_t i;
+	const struct TrackZones *tz;
 
-	for (i = 0; i < sizeof(track_zones) / sizeof(track_zones[0]); i++) {
-		if (strcmp(track, track_zones[i].name) == 0)
-			return is_private ? track_zones[i].pit_count_priv
-			    : track_zones[i].pit_count;
-	}
+	if ((tz = track_find(track)) != NULL)
+		return is_private ? tz->pit_count_priv : tz->pit_count;
 	return is_private ? 100 : 30;
+}
+
+/*
+ * Return 1 if the name is one of the tracks in the table above. The
+ * comparison is exact, the way the exe matches its track names.
+ */
+int
+track_known(const char *track)
+{
+	return track_find(track) != NULL;
 }
 
 /* <stdlib.h> hides the prototype under _POSIX_C_SOURCE; libc has it. */

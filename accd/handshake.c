@@ -3183,9 +3183,12 @@ post_slot_assignment:
 		if (!s->force_entry_list && !is_reconnect) {
 			/*
 			 * The slot now holds a car made by this join, even
-			 * if it was loaded from the entry list.
+			 * if it was loaded from the entry list, so it has no
+			 * entrylist ballast or restrictor either.
 			 */
 			car->entry_item = 0;
+			car->base_ballast_kg = 0;
+			car->base_restrictor = 0.0f;
 			car->race_number = server_alloc_race_number(s,
 			    c->car_id, (int)rnum);
 			/*
@@ -3214,6 +3217,13 @@ post_slot_assignment:
 		 * when forceEntryList is off.
 		 */
 		car->car_model = cmodel;
+		/*
+		 * The exe works out the BoP again on every join, reconnects
+		 * included (FUN_140025690), from the entrylist values plus
+		 * the bop.json lines for this track and model. The spawnDef
+		 * carries it, so no 0x53 goes out here.
+		 */
+		bop_apply(s, car);
 		/*
 		 * Grid-position assignment.  Only assigned when the slot
 		 * has no grid position yet — a reclaim (zombie reconnect)

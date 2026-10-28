@@ -230,7 +230,9 @@
   server browser.  Set `0` for direct-IP-only private servers.
 - **Entry list** — `entrylist.json` populates slots; with
   `forceEntryList: 1`, only listed Steam IDs are accepted.
-- **BoP** — `0x53` sent to the affected car on ballast/restrictor changes.
+- **BoP** — `bop.json` lines for the event track and the car model are
+  added to the entry list ballast/restrictor each time a car joins;
+  `/ballast` and `/restrictor` send `0x53` to the affected car.
 - **Debug tracing** — `-d` flag or `debug` console command enables
   full wire hexdump of every message.
 - **OpenBSD support** — builds on OpenBSD 7.9 arm64 (celeborn deploy
@@ -475,6 +477,31 @@ Pre-assigns car entries with driver info, ballast, restrictor, and
 grid positions.  If absent, the server accepts any client into the
 first available slot.  With `forceEntryList: 1`, only Steam IDs in
 the entry list are accepted.
+
+</details>
+
+<details>
+<summary><b>bop.json — optional per track and car model BoP</b></summary>
+
+```json
+{
+    "entries": [
+        { "track": "monza", "carModel": 35, "ballastKg": 10, "restrictor": 2 },
+        { "track": "silverstone", "carModel": 2, "ballastKg": -5 }
+    ]
+}
+```
+
+Each time a car joins, reconnects included, every line whose `track`
+and `carModel` match the event track and the car is added to the car's
+`entrylist.json` ballast and restrictor.  `ballastKg` is in kg, may be
+negative, and is clamped to `-40..40`; `restrictor` is in percent,
+clamped to `0..20`.  The sum is clamped to the same ranges.  `track`
+must be the plain track name (`monza`, not `monza_2019`); a line with
+an unknown track is logged with `Track ... doesn't exist, BoP line is
+ignored` and skipped.  `/ballast` and `/restrictor` override the result
+until the car rejoins, and `/manual entrylist` saves the entry list
+values without the BoP added.
 
 </details>
 
@@ -835,7 +862,7 @@ interoperability of an independently created program.
 │   ├── config.{c,h}         JSON config reader (UTF-16 LE or UTF-8).
 │   ├── console.{c,h}        stdin admin console (poll-driven).
 │   ├── dispatch.{c,h}       TCP / UDP message dispatchers.
-│   ├── entrylist.{c,h}      entrylist.json reader.
+│   ├── entrylist.{c,h}      entrylist.json and bop.json reader.
 │   ├── handlers.{c,h}       Per-msg-id handlers (22 TCP + 7 UDP).
 │   ├── handshake.{c,h}      ACP_REQUEST_CONNECTION + 0x0b + welcome.
 │   ├── io.{c,h}             Byte buffer + TCP framing layer.
