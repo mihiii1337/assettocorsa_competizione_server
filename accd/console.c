@@ -402,7 +402,7 @@ console_dispatch(struct Server *s, const char *line)
 		if (*arg == '\0') {
 			reply("usage: say <message>");
 		} else {
-			chat_broadcast_as(s, "SERVER", arg);
+			chat_broadcast_as(s, "SERVER", arg, 0);
 			reply("said: %s", arg);
 		}
 	} else if (chat_prefix(p, "debug")) {

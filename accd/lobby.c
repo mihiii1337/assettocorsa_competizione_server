@@ -1224,22 +1224,8 @@ lobby_apply_cp_event(struct LobbyClient *l, struct Server *s,
 	 * lobby connection (l) lives outside s->conns[], so the disconnect
 	 * loop never touches it.
 	 */
-	for (j = 0; j < ACC_MAX_CARS; j++) {
-		struct Conn *cn = s->conns[j];
-		struct ByteBuf out;
-
-		if (cn == NULL || cn->state != CONN_AUTH || cn->is_smpr)
-			continue;
-		bb_init(&out);
-		if (wr_u8(&out, SRV_CHAT_OR_STATE) == 0 &&
-		    wr_str_a(&out, "Server") == 0 &&
-		    wr_str_a(&out, "Server is starting the next event, you "
-		    "will be disconnected") == 0 &&
-		    wr_i32(&out, (int32_t)s->session.weekend_time_s) == 0 &&
-		    wr_u8(&out, 3) == 0)
-			(void)bcast_send_one(cn, out.data, out.wpos);
-		bb_free(&out);
-	}
+	chat_broadcast_as(s, "Server", "Server is starting the next event, "
+	    "you will be disconnected", 3);
 	for (j = 0; j < ACC_MAX_CARS; j++)
 		if (s->conns[j] != NULL)
 			conn_drop(s, s->conns[j]);

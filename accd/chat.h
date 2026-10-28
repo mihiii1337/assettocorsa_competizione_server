@@ -82,13 +82,13 @@ void	chat_sender_name(const struct DriverInfo *d, char *buf,
 void	chat_broadcast(struct Server *s, const char *text, uint8_t type);
 
 /*
- * Build and broadcast a 0x2b chat message in the player lane
- * (chat_type=0) under a custom sender name.  Used by the `say`
- * admin-console command so the message lands in the AC2 client's
- * chat panel rather than the Race-Control overlay.
+ * Build and broadcast a 0x2b chat message under a custom sender
+ * name. The `say` admin-console command uses chat_type 0 so the
+ * message lands in the AC2 client's chat panel rather than the
+ * Race-Control overlay.
  */
 void	chat_broadcast_as(struct Server *s, const char *sender,
-	    const char *text);
+	    const char *text, uint8_t chat_type);
 
 /*
  * Action helpers.  Each performs the mutation, broadcasts to

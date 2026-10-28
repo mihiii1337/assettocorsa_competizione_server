@@ -172,6 +172,23 @@ chat_sender_name(const struct DriverInfo *d, char *buf, size_t bufsz)
 			buf[i] = (char)(buf[i] - 'a' + 'A');
 }
 
+/* Build a 0x2b chat message and send it to every connected driver. */
+static void
+chat_send_all(struct Server *s, const char *sender, const char *text,
+    uint8_t chat_type)
+{
+	struct ByteBuf out;
+
+	bb_init(&out);
+	if (wr_u8(&out, SRV_CHAT_OR_STATE) == 0 &&
+	    wr_str_a(&out, sender) == 0 &&
+	    wr_str_a(&out, text) == 0 &&
+	    wr_i32(&out, (int32_t)s->session.weekend_time_s) == 0 &&
+	    wr_u8(&out, chat_type) == 0)
+		(void)bcast_all(s, out.data, out.wpos, BCAST_EXCEPT_NONE);
+	bb_free(&out);
+}
+
 /*
  * Build and broadcast a 0x2b chat message containing a system
  * notification (chat type 4 = info, 5 = system warning).
@@ -179,18 +196,9 @@ chat_sender_name(const struct DriverInfo *d, char *buf, size_t bufsz)
 void
 chat_broadcast(struct Server *s, const char *text, uint8_t chat_type)
 {
-	struct ByteBuf out;
-
 	if (text == NULL || text[0] == '\0')
 		return;
-	bb_init(&out);
-	if (wr_u8(&out, SRV_CHAT_OR_STATE) == 0 &&
-	    wr_str_a(&out, "") == 0 &&
-	    wr_str_a(&out, text) == 0 &&
-	    wr_i32(&out, (int32_t)s->session.weekend_time_s) == 0 &&
-	    wr_u8(&out, chat_type) == 0)
-		(void)bcast_all(s, out.data, out.wpos, BCAST_EXCEPT_NONE);
-	bb_free(&out);
+	chat_send_all(s, "", text, chat_type);
 }
 
 /*
@@ -229,24 +237,18 @@ chat_reply(const struct Server *s, struct Conn *c,
  * console command -- Race-Control broadcasts (chat_broadcast
  * above) land in the dedicated overlay lane which most operators
  * expect for system notifications, but operator chatter to
- * drivers needs the regular chat panel.
+ * drivers needs the regular chat panel. The exe's own named notices,
+ * like the "you will be disconnected" warning, go out under the
+ * sender "Server" with a system chat type.
  */
 void
-chat_broadcast_as(struct Server *s, const char *sender, const char *text)
+chat_broadcast_as(struct Server *s, const char *sender, const char *text,
+    uint8_t chat_type)
 {
-	struct ByteBuf out;
-
 	if (text == NULL || text[0] == '\0' ||
 	    sender == NULL || sender[0] == '\0')
 		return;
-	bb_init(&out);
-	if (wr_u8(&out, SRV_CHAT_OR_STATE) == 0 &&
-	    wr_str_a(&out, sender) == 0 &&
-	    wr_str_a(&out, text) == 0 &&
-	    wr_i32(&out, (int32_t)s->session.weekend_time_s) == 0 &&
-	    wr_u8(&out, 0) == 0)
-		(void)bcast_all(s, out.data, out.wpos, BCAST_EXCEPT_NONE);
-	bb_free(&out);
+	chat_send_all(s, sender, text, chat_type);
 }
 
 void
