@@ -1198,11 +1198,13 @@ session_tick(struct Server *s)
 	enter_phase(s, new_phase);
 
 	/*
-	 * Overtime entry check, applies to every session type: if
-	 * nobody is on a qualifying/practice lap or has recorded a race lap
-	 * outside the pit/garage, waiting the overtime grace period serves no
-	 * purpose.  Collapse ts[5] so compute_phase jumps straight to
-	 * COMPLETED on the next tick.
+	 * Overtime entry check, applies to every session type: if no
+	 * car is out of the pit/garage (in a race: with a lap done),
+	 * waiting the overtime grace period serves no purpose. Collapse
+	 * ts[5] so compute_phase jumps straight to COMPLETED on the next
+	 * tick. Practice and qualifying need no completed lap, a car on
+	 * its first flying lap keeps its right to finish; the snapshot
+	 * below applies the exact FUN_140042890 test to those.
 	 *
 	 * For race sessions with cars still on track, activate the
 	 * overtime hold so the schedule freezes until everyone has
@@ -1215,11 +1217,12 @@ session_tick(struct Server *s)
 		    i++) {
 			if (!s->cars[i].used)
 				continue;
-			if (!s->cars[i].race.in_pit &&
-			    (s->cars[i].race.lap_count > 0 ||
-			    ((def->session_type == 0 || def->session_type == 4) &&
-			    s->cars[i].race.on_track)))
-				racing++;
+			if (s->cars[i].race.in_pit)
+				continue;
+			if (def->session_type == 10 &&
+			    s->cars[i].race.lap_count == 0)
+				continue;
+			racing++;
 		}
 		if (racing == 0) {
 			log_info("overtime: no car racing on track, "
