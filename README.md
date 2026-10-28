@@ -143,8 +143,9 @@
 - **Ranked leaderboard / results** — real-time standings on lap
   completion, `0x36` broadcast in ranked order, `0x3f` grid at the
   qualifying to race boundary, `0x3e` session results at session end.
-- **Results file writer** — `results/YYMMDD_HHMMSS_<type>.json`
-  matching the stock server schema.  The top-level `laps` array logs
+- **Results file writer** — `results/YYYYMMDD_HHMMSS_<type>.json`
+  matching the stock server schema, written when a session completes
+  and, as the stock server does, when the server empties mid-session.  The top-level `laps` array logs
   every completed lap of the session in completion order, valid and
   invalid (with `isValidForBest` set from the lap-states word), uncapped
   — independent of the 16-slot ring that feeds the live leaderboard and
@@ -426,7 +427,7 @@ the server browser will show 24, not 30.
 | `latencyStrategy` | `0` | Relay-timestamp projection mode: `0` = slewed average-RTT (Mode B, the dedicated-server default), non-zero = min-RTT (Mode A).  Runtime-togglable via `/latencymode`. |
 | `doDriverSwapBroadcast` | `1` | `0` suppresses the 0x47 driver-swap-state fan-out; swap progress stays on the swapping car. |
 | `ignorePrematureDisconnects` | `0` | `0` force-drops an authenticated client that goes UDP-silent for over 5s; `1` tolerates the silence (no force-drop). |
-| `dumpLeaderboards` | `0` | `1` writes snapshots to `results/` on every update. |
+| `dumpLeaderboards` | `0` | `1` writes the session results to `results/` when a session completes, and for the abandoned session when the last client leaves.  A race that never reached its green flag is skipped, as on the stock server. |
 | `maxCarSlots` | `30` | Advertised car capacity (exe ctor default).  A public server's rating-gate clamp reduces this to 10 unless you raise the rating requirements; a private server (`registerToLobby: 0`) keeps the full value.  See [How many car slots can the server advertise?](#how-many-car-slots-can-the-server-advertise) for the full chain of clamps: `maxConnections`, the public-MP 30-cap, the rating-gate formula, and the per-track pit count. |
 | `trackMedalsRequirement` | `-1` | Minimum track-medals (0..5) to join, or `-1` to leave the server open to unrated players.  On public servers, each medal also adds 1 to the advertised slot cap, up to a maximum of +3.  No effect on private servers.  Set `0` only if you specifically want a ranked-only server (the ACC browser then refuses unrated joiners). |
 | `safetyRatingRequirement` | `-1` | Minimum SA rating (0..99) to join, or `-1` to leave open.  On public servers, adds `SA × 0.25` to the advertised slot cap (SA 70 → +17.5, SA 99 → +24.75, bounded by the 30-slot ceiling).  No effect on private servers. |

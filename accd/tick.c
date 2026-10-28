@@ -1093,6 +1093,7 @@ tick_run(struct Server *s)
 	 * randomizeTrackWhenEmpty adds a random track pick before the reset.
 	 */
 	if (s->nconns == 0 && s->session.phase != PHASE_WAITING) {
+		session_dump_abandoned(s);
 		if (s->randomize_track_when_empty) {
 			log_info("no drivers around, resetting session "
 			    "with a new random track");

@@ -495,6 +495,28 @@ overtime_close(struct Server *s, uint64_t now)
 	s->session.advance_at_ms = now + post_grace_ms(s);
 }
 
+/*
+ * The exe's weekend reset (FUN_14002aca0) writes the results of the
+ * session it abandons when its connection list is empty, so a session
+ * cut short because everyone left still leaves a file. SMPR monitors
+ * do not count, the exe has none. Called before anything changes the
+ * session state, so the file describes the session that ran.
+ */
+void
+session_dump_abandoned(struct Server *s)
+{
+	int i;
+
+	if (!s->dump_leaderboards || !s->session.ts_valid ||
+	    s->session.results_written)
+		return;
+	for (i = 0; i < ACC_MAX_CARS; i++)
+		if (s->conns[i] != NULL && !s->conns[i]->is_smpr)
+			return;
+	(void)results_write(s);
+	s->session.results_written = 1;
+}
+
 void
 session_start(struct Server *s)
 {
@@ -1213,6 +1235,7 @@ session_tick(struct Server *s)
 	if (server_used_car_count(s) == 0 &&
 	    s->session.phase != PHASE_WAITING) {
 		log_info("no drivers, resetting to first session");
+		session_dump_abandoned(s);
 		session_reset(s, 0);
 		lobby_notify_session_changed(&s->lobby);
 		return;

@@ -47,6 +47,13 @@
 void	session_reset(struct Server *s, uint8_t session_index);
 
 /*
+ * Before the empty-server weekend reset: write the results of the
+ * session being abandoned when dumpLeaderboards is on and no game
+ * client is connected.
+ */
+void	session_dump_abandoned(struct Server *s);
+
+/*
  * Value the per-car formation_lap_done flag (exe car+0x204) should hold
  * for the given session.  1 means the car's first sector split counts,
  * which is what the exe does everywhere except a Race on

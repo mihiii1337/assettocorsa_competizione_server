@@ -204,8 +204,11 @@ When 0, an authenticated client that stops sending UDP for more than
 5 seconds is force-disconnected; when 1 the silence is tolerated.
 .It Va dumpLeaderboards
 Default 0.
-When 1, every leaderboard update is snapshot-written to
-.Pa results/ .
+When 1, the session results are written to
+.Pa results/
+when a session completes, and for the abandoned session when the last
+client leaves.
+A race that never reached its green flag is skipped.
 .It Va maxMonitors
 Default
 .Va maxConnections
@@ -440,7 +443,8 @@ Optional weekend-weather constraints applied on a weekend reset.
 .It Pa cfg/banlist.txt
 Persistent ban list (one Steam ID per line), managed automatically.
 .It Pa results/
-Session results written as JSON on session completion.
+Session results written as JSON on session completion, or when the
+server empties mid-session.
 A car keeps its car id for the whole event, also after its driver
 leaves, so its laps and results row stay with the driver who drove it.
 Also hosts the per-session latency CSVs when
