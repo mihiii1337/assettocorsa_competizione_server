@@ -428,7 +428,7 @@ advertised slot count stays at `maxCarSlots`.
 | Key | Default | Meaning |
 |---|---|---|
 | `password` | `""` | Required to join as a driver; empty means open. |
-| `adminPassword` | `""` | Used in-game via `/admin <pw>` to elevate to admin. |
+| `adminPassword` | `""` | Used in-game via `/admin <pw>` to elevate to admin. The log shows `/admin [redacted]` instead of the attempt. |
 | `spectatorPassword` | `""` | Admits the client as a carless spectator: no car slot, excluded from the grid/leaderboard and driver count, but receives all broadcasts to watch. |
 | `allowAutoDQ` | `1` | `0` caps repeated-cutting escalation at a 30 s stop&go instead of disqualifying.  A failed DT/SG serve still disqualifies, matching the dedicated server (allowAutoDQ gates only the cutting force). |
 | `registerToLobby` | `0` | `1` lists the server publicly in the ACC browser. |

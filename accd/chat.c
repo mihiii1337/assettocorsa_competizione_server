@@ -68,6 +68,14 @@ chat_prefix(const char *s, const char *p)
 	    (s[pl] == '\0' || s[pl] == ' ');
 }
 
+const char *
+chat_log_text(const char *text)
+{
+	if (text != NULL && chat_prefix(text, "/admin"))
+		return "/admin [redacted]";
+	return text;
+}
+
 int
 chat_parse_int(const char *s, int *out)
 {
@@ -785,7 +793,7 @@ chat_process(struct Server *s, struct Conn *c, const char *text)
 	}
 
 	log_info("CHAT conn=%u: %s", (unsigned)c->conn_id,
-	    chat_prefix(text, "/admin") ? "/admin [redacted]" : text);
+	    chat_log_text(text));
 
 	/* /admin elevation. */
 	if (chat_prefix(text, "/admin")) {

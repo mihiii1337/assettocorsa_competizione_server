@@ -69,6 +69,12 @@ int	chat_parse_int(const char *s, int *out);
 int	chat_car_by_racenum(struct Server *s, int num);
 
 /*
+ * Chat text as it may appear in the log: the argument of /admin is
+ * the admin password, so the whole line is replaced.
+ */
+const char	*chat_log_text(const char *text);
+
+/*
  * Sender name of a relayed player chat, built from the driver's
  * names. buf should hold CHAT_SENDER_SIZE bytes, enough for the
  * three names and their separators.
