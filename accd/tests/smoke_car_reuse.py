@@ -5,8 +5,9 @@ driver's car slot could be handed to someone else.
 
 A keeper holds the session open. Driver A laps and leaves, driver B
 joins and laps, then A comes back in the same car and laps again.
-After /next the results file must give A's two laps to A's car and
-B's lap to B's car. Invoked from `make test`. Exits 0 on success,
+Driver C joins and leaves without a lap. After /next the results file
+must give A's two laps to A's car and B's lap to B's car, and must not
+list C. Invoked from `make test`. Exits 0 on success,
 non-zero on any failure.
 """
 
@@ -26,6 +27,7 @@ from smoke_handshake import ACCD_PROTOCOL_VERSION, TCP_PORT, fail, write_cfg
 KEEPER = "S76561199000000001"
 DRIVER_A = "S76561199000000002"
 DRIVER_B = "S76561199000000003"
+DRIVER_C = "S76561199000000004"
 SETTINGS = {"serverName": "smoke", "adminPassword": "admin", "dumpLeaderboards": 1}
 
 
@@ -149,6 +151,9 @@ def main():
             b = Client(proc, DRIVER_B, 93)
             clients.append(b)
             b.lap(99000)
+            c = Client(proc, DRIVER_C, 94)
+            c.close()
+            keeper.pump(0.5)
 
             a = Client(proc, DRIVER_A, 92)
             clients.append(a)
@@ -172,6 +177,8 @@ def main():
                 if car["carId"] in owner:
                     fail(f"car {car['carId']} has two result rows")
                 owner[car["carId"]] = [d["playerId"] for d in car["drivers"]]
+            if any(DRIVER_C in ids for ids in owner.values()):
+                fail("driver who left without a lap has a result row")
             laps = {lp["laptime"]: lp["carId"] for lp in obj["laps"]}
             want = {88000: DRIVER_A, 99000: DRIVER_B, 77000: DRIVER_A}
             for ms, steam in want.items():

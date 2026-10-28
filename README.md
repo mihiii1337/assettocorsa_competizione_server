@@ -77,9 +77,10 @@
   alive and after the inactive-peer sweep removes it.  Outside the
   entry list a driver must come back in the same car model to be
   recognized, as in the exe; another model joins as a new car.
-- **Departed cars stay in the event** with their car id, laps and
-  results row, so a returning driver picks them up again and a new
-  driver never inherits them.  A new car takes an empty slot first;
+- **Departed cars stay in the event** with their car id and laps, so
+  a returning driver picks them up again and a new driver never
+  inherits them.  A departed car is listed in a session's results when
+  it set a lap in that session.  A new car takes an empty slot first;
   when every slot holds a car, connected or not, it takes the slot of
   the driver who left first under a car id never used before in the
   event.  That departed car then drops out of the results, with a
