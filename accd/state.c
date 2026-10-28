@@ -239,6 +239,46 @@ track_random_pick(struct Server *s)
 	    s->track, n);
 }
 
+/*
+ * Wire ids for cars that take over a slot another car had. Slot i
+ * gives its first car ACC_CAR_ID_BASE + i, so these come from a
+ * counter above that range and no two cars of one event share an
+ * id, as with the exe's per-event car id counter (FUN_140025690).
+ * 0xffff is left out, the wire uses it for "no car".
+ */
+#define CAR_ID_REUSE_FIRST	(ACC_CAR_ID_BASE + ACC_MAX_CARS)
+#define CAR_ID_REUSE_LAST	0xfffe
+
+/*
+ * Put a car slot back to the state of one no car has used yet.
+ */
+static void
+car_slot_clear(struct CarEntry *car, int i)
+{
+	int ai;
+
+	for (ai = 0; ai < ACC_MAX_SESSIONS; ai++)
+		free(car->race_archive[ai]);
+	memset(car, 0, sizeof(*car));
+	car->car_id = (uint16_t)(ACC_CAR_ID_BASE + i);
+	car->last_elo = 0xff;		/* unrated sentinel */
+	car->race.last_split_id = SPLIT_ID_NONE;
+	car->team_entry_id = -1;	/* standalone until entrylist_load
+					 * expands a multi-driver entry. */
+	/*
+	 * Unset until the entrylist says otherwise. The entrylist parser
+	 * is the only other writer, so without this a car that has no
+	 * entry carries 0, which both the join path and the race-grid
+	 * builder read as a fixed request for pole: the first driver to
+	 * connect is granted it and everyone after collides and logs the
+	 * "already occupied" warning over an entrylist that may not even
+	 * exist. The exe seeds the same field to -1 before its entrylist
+	 * lookup (FUN_140025690).
+	 */
+	car->default_grid_position = -1;
+	car_runtime_reset_gate(&car->rt);
+}
+
 void
 server_init(struct Server *s)
 {
@@ -274,27 +314,9 @@ server_init(struct Server *s)
 	s->tyre_set_count = 50;	/* Kunos default; eventRules.json reduces it */
 	snprintf(s->car_group, sizeof(s->car_group), "FreeForAll");
 	lobby_init(&s->lobby);
-	for (int i = 0; i < ACC_MAX_CARS; i++) {
-		s->cars[i].car_id = (uint16_t)(ACC_CAR_ID_BASE + i);
-		s->cars[i].last_elo = 0xff;	/* unrated sentinel */
-		s->cars[i].race.last_split_id = SPLIT_ID_NONE;
-		s->cars[i].team_entry_id = -1;	/* standalone until
-						 * entrylist_load expands a
-						 * multi-driver entry. */
-		/*
-		 * Unset until the entrylist says otherwise.  server_init
-		 * memsets the whole struct and the entrylist parser is the
-		 * only other writer, so without this a car that has no entry
-		 * carries 0, which both the join path and the race-grid
-		 * builder read as a fixed request for pole: the first driver
-		 * to connect is granted it and everyone after collides and
-		 * logs the "already occupied" warning over an entrylist that
-		 * may not even exist.  The exe seeds the same field to -1
-		 * before its entrylist lookup (FUN_140025690).
-		 */
-		s->cars[i].default_grid_position = -1;
-		car_runtime_reset_gate(&s->cars[i].rt);
-	}
+	for (int i = 0; i < ACC_MAX_CARS; i++)
+		car_slot_clear(&s->cars[i], i);
+	s->next_car_id = CAR_ID_REUSE_FIRST;
 	/*
 	 * Anchor the 0x4e debounce to server start so the periodic
 	 * gate measures elapsed-since-startup rather than absolute
@@ -480,6 +502,7 @@ conn_drop(struct Server *s, struct Conn *c)
 		 * the leaderboard session-best counters.
 		 */
 		s->cars[c->car_id].used = 0;
+		s->cars[c->car_id].left_ms = mono_ms();
 		smpr_notify_car_changed(s, c->car_id);
 		car_runtime_reset_gate(&s->cars[c->car_id].rt);
 		/*
@@ -488,7 +511,7 @@ conn_drop(struct Server *s, struct Conn *c)
 		 * reset entry-list reconciliation, not a single leaver.
 		 */
 		log_kunos("car %d has no driving connection anymore, "
-		    "will remove it", ACC_CAR_ID_BASE + c->car_id);
+		    "will remove it", s->cars[c->car_id].car_id);
 		/*
 		 * Team-entry 0x47 fan-out at conn_drop: if the leaving
 		 * driver was part of a multi-car team, kunos pcap shows
@@ -552,19 +575,81 @@ server_find_conn(struct Server *s, uint16_t conn_id)
 }
 
 int
-server_alloc_car(struct Server *s)
+server_car_slot(const struct Server *s, uint16_t car_id)
 {
 	int i;
 
-	for (i = 0; i < ACC_MAX_CARS && i < s->max_connections; i++) {
-		if (!s->cars[i].used) {
-			s->cars[i].used = 1;
-			s->cars[i].car_id = (uint16_t)(ACC_CAR_ID_BASE + i);
-			s->cars[i].last_elo = 0xff;
+	for (i = 0; i < ACC_MAX_CARS; i++)
+		if (s->cars[i].car_id == car_id)
 			return i;
-		}
-	}
 	return -1;
+}
+
+static uint16_t
+server_new_car_id(struct Server *s)
+{
+	uint16_t id;
+
+	do {
+		id = s->next_car_id;
+		if (id < CAR_ID_REUSE_FIRST || id > CAR_ID_REUSE_LAST)
+			id = CAR_ID_REUSE_FIRST;
+		if (id == CAR_ID_REUSE_LAST) {
+			s->next_car_id = CAR_ID_REUSE_FIRST;
+			log_warn("car ids wrapped, ids of cars gone from "
+			    "the server are handed out again");
+		} else
+			s->next_car_id = (uint16_t)(id + 1);
+	} while (server_car_slot(s, id) >= 0);
+	return id;
+}
+
+/*
+ * A car that loses its driver keeps its slot, id, laps and results
+ * row, like the exe which only marks its timing entry disconnected
+ * (FUN_14001c300) and gives the car back to the same steam id and
+ * model. So a new car takes an empty slot first. When there is none,
+ * it takes the slot whose driver left longest ago under a new id: the
+ * laps of the old car stay in the results log under its own id
+ * instead of moving to the new driver. Only its row is lost, and only
+ * if it left during the current session.
+ */
+int
+server_alloc_car(struct Server *s)
+{
+	struct CarEntry *car;
+	int i, pick = -1;
+
+	for (i = 0; i < ACC_MAX_CARS && i < s->max_connections; i++) {
+		car = &s->cars[i];
+		if (car->used)
+			continue;
+		if (car->driver_count == 0) {
+			pick = i;
+			break;
+		}
+		if (pick < 0 || car->left_ms < s->cars[pick].left_ms)
+			pick = i;
+	}
+	if (pick < 0)
+		return -1;
+	car = &s->cars[pick];
+	if (car->driver_count > 0) {
+		uint16_t old = car->car_id;
+
+		if (car->left_ms != 0 &&
+		    car->left_ms >= s->session_reset_ms)
+			log_warn("no free car slot, car %u of %s left this "
+			    "session and drops out of its results",
+			    (unsigned)old, car->drivers[0].steam_id);
+		car_slot_clear(car, pick);
+		car->car_id = server_new_car_id(s);
+		log_info("car %u takes the slot of departed car %u",
+		    (unsigned)car->car_id, (unsigned)old);
+	}
+	car->used = 1;
+	car->last_elo = 0xff;
+	return pick;
 }
 
 /*

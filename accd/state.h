@@ -718,7 +718,9 @@ struct CarRuntime {
  * Per-car record (entry list slot).
  */
 struct CarEntry {
-	uint16_t	car_id;			/* assigned by server */
+	uint16_t	car_id;			/* wire id, unique within
+						 * the event; see
+						 * server_alloc_car */
 	int32_t		race_number;
 	uint8_t		car_model;		/* see HB §IX.3 */
 	uint8_t		forced_car_model;	/* entrylist forcedCarModel;
@@ -767,6 +769,9 @@ struct CarEntry {
 	struct DriverInfo drivers[ACC_MAX_DRIVERS_PER_CAR];
 	uint8_t		swap_state[ACC_MAX_DRIVERS_PER_CAR]; /* 0=idle..5=done */
 	int		used;			/* slot occupied? */
+	uint64_t	left_ms;		/* mono_ms when the last
+						 * driver left, 0 if never
+						 * driven */
 	/*
 	 * Team-entry anchor: when a forceEntryList entrylist entry has
 	 * multiple registered drivers, the loader expands it into N
@@ -967,7 +972,7 @@ struct Conn {
  * 0x100f is set or the laptime is outside [1, 0x7ffffffe].
  */
 struct ResultsLap {
-	uint16_t	car_id;		/* wire car id (ACC_CAR_ID_BASE + slot) */
+	uint16_t	car_id;		/* wire car id, unique in the event */
 	uint8_t		driver_index;
 	uint8_t		is_valid;	/* isValidForBest */
 	int32_t		lap_time_ms;
@@ -1225,6 +1230,10 @@ struct Server {
 	int		nconns;
 
 	struct CarEntry	cars[ACC_MAX_CARS];
+	uint16_t	next_car_id;	/* next wire id for a car that
+					 * takes over a used slot */
+	uint64_t	session_reset_ms;	/* mono_ms of the last
+						 * session_reset */
 
 	/* sessions parsed from event.json */
 	struct SessionDef	sessions[ACC_MAX_SESSIONS];
@@ -1366,10 +1375,13 @@ struct Conn *
 void	car_runtime_reset_gate(struct CarRuntime *rt);
 
 /*
- * Allocate a free CarEntry slot and return its index, or -1 if
- * the entry list is full.  car_id matches the index by design.
+ * Allocate a CarEntry slot for a new car and return its index, or -1
+ * if every slot holds a connected car. An empty slot comes first, then
+ * the one whose driver left longest ago.
  */
 int	server_alloc_car(struct Server *s);
+/* Slot index of the car with this wire id, or -1. */
+int	server_car_slot(const struct Server *s, uint16_t car_id);
 /* Count used car slots = "drivers present" (excludes carless spectators). */
 int	server_used_car_count(const struct Server *s);
 

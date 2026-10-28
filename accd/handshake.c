@@ -2790,9 +2790,9 @@ handshake_handle(struct Server *s, struct Conn *c,
 							continue;
 						log_info("Recognized "
 						    "reconnect (zombie "
-						    "slot %d): carId %d "
+						    "slot %d): carId %u "
 						    "raceNumber #%d for %s",
-						    k, k,
+						    k, (unsigned)ec->car_id,
 						    ec->race_number,
 						    steam_buf);
 						matched_dj = dj;
@@ -2836,16 +2836,25 @@ handshake_handle(struct Server *s, struct Conn *c,
 					 * still allows a later correct-car
 					 * reclaim via the zombie path.
 					 */
-					s->cars[reconnect_slot].used = 0;
+					{
+						struct CarEntry *rc =
+						    &s->cars[reconnect_slot];
+
+						if (rc->used) {
+							rc->used = 0;
+							rc->left_ms = mono_ms();
+						}
+					}
 					free(first); free(last); free(sname);
 					free(steam); free(team);
 					goto reply;
 				}
 				c->car_id = reconnect_slot;
 				is_reconnect = 1;
-				log_info("Recognized reconnect: carId %d "
+				log_info("Recognized reconnect: carId %u "
 				    "carModel %u raceNumber #%d",
-				    c->car_id, (unsigned)cmodel,
+				    (unsigned)s->cars[c->car_id].car_id,
+				    (unsigned)cmodel,
 				    s->cars[c->car_id].race_number);
 				goto post_slot_assignment;
 			}
@@ -3255,8 +3264,8 @@ post_slot_assignment:
 		 * grid slot is meaningful even when 0 (pole = unused
 		 * in 0-indexed find_grid_slot return). */
 		if (car->race.grid_position >= 0)
-			log_kunos("  Car %d Pos %d",
-			    ACC_CAR_ID_BASE + c->car_id,
+			log_kunos("  Car %u Pos %d",
+			    (unsigned)car->car_id,
 			    (int)car->race.grid_position);
 
 		free(first);
@@ -3300,9 +3309,9 @@ post_slot_assignment:
 		    (unsigned)c->conn_id,
 		    ldrv->first_name, ldrv->last_name, ldrv->steam_id,
 		    (unsigned)lcar->car_model);
-		log_kunos("Creating new car connection: carId %d, "
+		log_kunos("Creating new car connection: carId %u, "
 		    "carModel %u, raceNumber #%d",
-		    ACC_CAR_ID_BASE + c->car_id,
+		    (unsigned)lcar->car_id,
 		    (unsigned)lcar->car_model, lcar->race_number);
 		/*
 		 * "Sent handshake response ... with N bytes" is emitted
@@ -3347,8 +3356,8 @@ reply:
 	 * fills in c->welcome_bytes.
 	 */
 	if (c->car_id >= 0 && c->car_id < ACC_MAX_CARS)
-		log_kunos("Sent handshake response for car %d connection %u with %u bytes",
-		    ACC_CAR_ID_BASE + c->car_id,
+		log_kunos("Sent handshake response for car %u connection %u with %u bytes",
+		    (unsigned)s->cars[c->car_id].car_id,
 		    (unsigned)c->conn_id,
 		    (unsigned)c->welcome_bytes);
 

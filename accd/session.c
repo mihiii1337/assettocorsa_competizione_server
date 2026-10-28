@@ -249,6 +249,8 @@ session_reset(struct Server *s, uint8_t session_index)
 	 * here, so the log has already been consumed.
 	 */
 	results_laps_reset(s);
+	/* A car that left before this has its results written. */
+	s->session_reset_ms = mono_ms();
 
 	if (session_index >= s->session_count) {
 		s->session.phase = PHASE_RESULTS;
@@ -1150,8 +1152,8 @@ enter_phase(struct Server *s, uint8_t new_phase)
 			for (i = 0; i < ACC_MAX_CARS; i++) {
 				if (s->cars[i].used &&
 				    s->cars[i].race.grid_position == pos) {
-					log_kunos("  Car %d Pos %d",
-					    ACC_CAR_ID_BASE + i, pos);
+					log_kunos("  Car %u Pos %d",
+					    (unsigned)s->cars[i].car_id, pos);
 				}
 			}
 		}

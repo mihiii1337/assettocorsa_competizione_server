@@ -70,12 +70,13 @@
  * by this connection.  Returns 0 if valid, -1 if not.
  */
 static int
-check_car_owner(struct Conn *c, uint16_t wire_car_id)
+check_car_owner(const struct Server *s, const struct Conn *c,
+    uint16_t wire_car_id)
 {
 	if (c->car_id < 0 || c->car_id >= ACC_MAX_CARS)
 		return -1;
-	/* Compare against the wire ID (base 1001), not the slot index. */
-	return ((uint16_t)(ACC_CAR_ID_BASE + c->car_id) == wire_car_id) ? 0 : -1;
+	/* Compare against the wire ID, not the slot index. */
+	return (s->cars[c->car_id].car_id == wire_car_id) ? 0 : -1;
 }
 
 /* ----- 0x19 SA contact report -> broadcast 0x1b ----------------- */
@@ -817,7 +818,7 @@ h_sector_split_single(struct Server *s, struct Conn *c,
 			    "flags: %u, "
 			    "S1 %d:%d:%d, S2 %d:%d:%d, S3 %d:%d:%d, "
 			    "fuel 0.000000%s",
-			    ACC_CAR_ID_BASE + c->car_id,
+			    s->cars[c->car_id].car_id,
 			    (unsigned)didx,
 			    lm / 60000, (lm / 1000) % 60, lm % 1000,
 			    (int)lap_time,
@@ -1045,7 +1046,7 @@ h_car_system_update(struct Server *s, struct Conn *c,
 		    (unsigned)c->conn_id);
 		return 0;
 	}
-	if (check_car_owner(c, car_id) < 0) {
+	if (check_car_owner(s, c, car_id) < 0) {
 		log_warn("Received ACP_CAR_SYSTEM_UPDATE for wrong car "
 		    "- senderId %u, carId %u",
 		    (unsigned)c->conn_id, (unsigned)car_id);
@@ -1089,7 +1090,7 @@ h_tyre_compound_update(struct Server *s, struct Conn *c,
 		    (unsigned)c->conn_id);
 		return 0;
 	}
-	if (check_car_owner(c, car_id) < 0) {
+	if (check_car_owner(s, c, car_id) < 0) {
 		log_warn("Received ACP_TYRE_COMPOUND_UPDATE for wrong car "
 		    "- senderId %u, carId %u",
 		    (unsigned)c->conn_id, (unsigned)car_id);
@@ -1132,7 +1133,7 @@ h_car_location_update(struct Server *s, struct Conn *c,
 		    (unsigned)c->conn_id);
 		return 0;
 	}
-	if (check_car_owner(c, car_id) < 0) {
+	if (check_car_owner(s, c, car_id) < 0) {
 		log_warn("Received ACP_CAR_LOCATION_UPDATE for wrong car "
 		    "- senderId %u, carId %u",
 		    (unsigned)c->conn_id, (unsigned)car_id);
@@ -1703,8 +1704,8 @@ h_damage_zones(struct Server *s, struct Conn *c,
 	log_info("Updated %d clients with new damage zones for car %d",
 	    rc, c->car_id);
 	/* accweb regex: Updated \d+ clients with new damage zones for car (\d+) */
-	log_kunos("Updated %d clients with new damage zones for car %d",
-	    rc, ACC_CAR_ID_BASE + c->car_id);
+	log_kunos("Updated %d clients with new damage zones for car %u",
+	    rc, (unsigned)s->cars[c->car_id].car_id);
 out:
 	bb_free(&out);
 	return 0;
@@ -1819,20 +1820,19 @@ h_update_driver_swap_state(struct Server *s, struct Conn *c,
 	uint8_t msg_id, dcnt;
 	uint16_t car_id;
 	struct CarEntry *car;
-	int slot_idx;
+	int slot, slot_idx;
 
 	rd_init(&r, body, len);
 	if (rd_u8(&r, &msg_id) < 0 || rd_u16(&r, &car_id) < 0) {
 		log_warn("h_update_driver_swap_state: short body");
 		return 0;
 	}
-	if (car_id < ACC_CAR_ID_BASE ||
-	    car_id >= ACC_CAR_ID_BASE + ACC_MAX_CARS) {
+	if ((slot = server_car_slot(s, car_id)) < 0) {
 		log_warn("h_update_driver_swap_state: bad car_id %u",
 		    (unsigned)car_id);
 		return 0;
 	}
-	car = &s->cars[car_id - ACC_CAR_ID_BASE];
+	car = &s->cars[slot];
 	if (!car->used) {
 		log_warn("h_update_driver_swap_state: unused car %u",
 		    (unsigned)car_id);
@@ -1845,8 +1845,7 @@ h_update_driver_swap_state(struct Server *s, struct Conn *c,
 	 * The dual-path logic in FUN_140012c30 applies to the fan-out over
 	 * peer connections, not to the inbound sender.
 	 */
-	if (c->car_id < 0 || c->car_id >= ACC_MAX_CARS ||
-	    (uint16_t)(ACC_CAR_ID_BASE + c->car_id) != car_id) {
+	if (check_car_owner(s, c, car_id) < 0) {
 		log_warn("h_update_driver_swap_state: alien car %u from conn %d",
 		    (unsigned)car_id, c->car_id);
 		return 0;
@@ -1914,8 +1913,7 @@ h_execute_driver_swap(struct Server *s, struct Conn *c,
 		    "for connection %u", (unsigned)c->conn_id);
 		return 0;
 	}
-	if (c->car_id < 0 ||
-	    (uint16_t)(ACC_CAR_ID_BASE + c->car_id) != car_id) {
+	if (check_car_owner(s, c, car_id) < 0) {
 		/* Exe FUN_1400142f0:1100-1103 logs and breaks with NO 0x49
 		 * reply on the carId-mismatch path. */
 		log_warn("ACP_EXECUTE_DRIVER_SWAP, but carId mismatch: %u "
@@ -2071,7 +2069,7 @@ h_driver_swap_state_request(struct Server *s, struct Conn *c,
 		return 0;
 	}
 	(void)wire_b2;
-	if (check_car_owner(c, car_id) < 0) {
+	if (check_car_owner(s, c, car_id) < 0) {
 		log_warn("ACP_DRIVER_SWAP_STATE_REQUEST for the wrong "
 		    "carId: %u (Connection owns %d)",
 		    (unsigned)car_id, c->car_id);
@@ -2288,7 +2286,7 @@ h_mandatory_pitstop_served(struct Server *s, struct Conn *c,
 		log_warn("h_mandatory_pitstop_served: short body");
 		return 0;
 	}
-	if (check_car_owner(c, car_id) < 0) {
+	if (check_car_owner(s, c, car_id) < 0) {
 		log_warn("Received ACP_MANDATORY_PITSTOP_SERVED for carId "
 		    "%u, but connection is %u",
 		    (unsigned)car_id, (unsigned)c->conn_id);
@@ -2393,8 +2391,8 @@ h_load_setup(struct Server *s, struct Conn *c,
 	 * matching the exe (FUN_1400142f0 cleans up and returns without
 	 * sending 0x56).
 	 */
-	slot = (int)car_id - ACC_CAR_ID_BASE;
-	if (slot < 0 || slot >= ACC_MAX_CARS || !s->cars[slot].used) {
+	slot = server_car_slot(s, car_id);
+	if (slot < 0 || !s->cars[slot].used) {
 		log_info("load setup: unknown car %u, no reply",
 		    (unsigned)car_id);
 		return 0;
@@ -2947,8 +2945,8 @@ h_udp_car_info_request(struct Server *s,
 	 */
 	requester->last_udp_server_ms = (uint32_t)mono_ms();
 
-	slot = (int)target_car_id - ACC_CAR_ID_BASE;
-	if (slot < 0 || slot >= ACC_MAX_CARS || !s->cars[slot].used) {
+	slot = server_car_slot(s, target_car_id);
+	if (slot < 0 || !s->cars[slot].used) {
 		log_warn("car info request for unknown car %u",
 		    (unsigned)target_car_id);
 		return 0;

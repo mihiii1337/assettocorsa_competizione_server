@@ -77,6 +77,13 @@
   alive and after the inactive-peer sweep removes it.  Outside the
   entry list a driver must come back in the same car model to be
   recognized, as in the exe; another model joins as a new car.
+- **Departed cars stay in the event** with their car id, laps and
+  results row, so a returning driver picks them up again and a new
+  driver never inherits them.  A new car takes an empty slot first;
+  when every slot holds a car, connected or not, it takes the slot of
+  the driver who left first under a car id never used before in the
+  event.  That departed car then drops out of the results, with a
+  warning in the log if it left during the current session.
 - **Pit box per car** — each joining car gets the pit box held by the
   fewest other connected cars (lowest first), kept for the whole
   connection, so drivers spawn in their own garage whatever the join

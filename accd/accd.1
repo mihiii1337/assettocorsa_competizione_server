@@ -429,6 +429,8 @@ Optional weekend-weather constraints applied on a weekend reset.
 Persistent ban list (one Steam ID per line), managed automatically.
 .It Pa results/
 Session results written as JSON on session completion.
+A car keeps its car id for the whole event, also after its driver
+leaves, so its laps and results row stay with the driver who drove it.
 Also hosts the per-session latency CSVs when
 .Va writeLatencyFileDumps
 is enabled.

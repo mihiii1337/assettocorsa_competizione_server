@@ -330,7 +330,9 @@ entrylist_server(void)
 
 /*
  * Without an entry list a car made by a join starts from zero, even
- * in a slot an earlier car with an admin ballast left behind.
+ * in a slot an earlier car with an admin ballast left behind. A new
+ * car only takes over a departed car's slot when no slot is empty,
+ * so give the server a single one.
  */
 static void
 open_server(void)
@@ -340,6 +342,7 @@ open_server(void)
 	int p;
 
 	s = new_server();
+	s->max_connections = 1;
 	(void)bop_load(s, dir);
 	c = join(s, "S200", 35, 21, &p);
 	expect(s, c, 25, 0.08f, "car made by a join");

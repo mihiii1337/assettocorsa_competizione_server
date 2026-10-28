@@ -1108,7 +1108,7 @@ chat_process(struct Server *s, struct Conn *c, const char *text)
 			else
 				st = "!Track";
 			wrote = snprintf(line + off, sizeof(line) - off,
-			    " #%d%s:%s", ACC_CAR_ID_BASE + i,
+			    " #%u%s:%s", (unsigned)car->car_id,
 			    (i == c->car_id) ? "(you)" : "", st);
 			if (wrote < 0)
 				break;
