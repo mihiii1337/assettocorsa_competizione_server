@@ -982,9 +982,12 @@ h_chat(struct Server *s, struct Conn *c,
 			chat_sender_name(&car->drivers[idx], sender,
 			    sizeof(sender));
 	}
-	log_info("CHAT %s: %s", sender, text);
+	/* Never log credentials supplied to /admin. */
+	const char *logged_text = text != NULL && chat_prefix(text, "/admin")
+	    ? "/admin [redacted]" : text;
+	log_info("CHAT %s: %s", sender, logged_text);
 	/* accweb regex: ^CHAT (.*?): (.*)$  -- stdout plain form */
-	log_kunos("CHAT %s: %s", sender, text);
+	log_kunos("CHAT %s: %s", sender, logged_text);
 	if (text != NULL && strstr(text, "%%") != NULL) {
 		log_warn("h_chat: dropping message with format "
 		    "specifier from conn=%u", (unsigned)c->conn_id);

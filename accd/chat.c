@@ -784,7 +784,8 @@ chat_process(struct Server *s, struct Conn *c, const char *text)
 		text = norm;
 	}
 
-	log_info("CHAT conn=%u: %s", (unsigned)c->conn_id, text);
+	log_info("CHAT conn=%u: %s", (unsigned)c->conn_id,
+	    chat_prefix(text, "/admin") ? "/admin [redacted]" : text);
 
 	/* /admin elevation. */
 	if (chat_prefix(text, "/admin")) {
