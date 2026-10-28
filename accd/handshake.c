@@ -2124,6 +2124,43 @@ handshake_send_stint_sync(struct Conn *new_conn, struct Server *s)
 }
 
 /*
+ * Close every other connection with the steam id of a handshake that
+ * passed all the join gates. A connection whose car the new one took
+ * back loses the car first, so dropping it leaves the car alone.
+ *
+ * This departs from the exe on purpose. FUN_140025690 closes them as
+ * soon as it has parsed the driver info, before the ban, kick,
+ * password, rating, session, car and slot gates. The client sends the
+ * steam id unverified, so a handshake that is then rejected could
+ * knock any connected driver off the server.
+ */
+static void
+handshake_close_same_steam(struct Server *s, struct Conn *c)
+{
+	int i;
+
+	if (c->steam_id[0] == '\0')
+		return;
+	for (i = 0; i < ACC_MAX_CARS; i++) {
+		struct Conn *o = s->conns[i];
+
+		if (o == NULL || o == c ||
+		    strcmp(o->steam_id, c->steam_id) != 0)
+			continue;
+		if (c->car_id >= 0 && o->car_id == c->car_id) {
+			log_info("Removed connection due to (quick) "
+			    "reconnect: conn=%u for %s",
+			    (unsigned)o->conn_id, c->steam_id);
+			o->car_id = -1;
+		} else
+			log_info("closing old connection %u for SteamId %s "
+			    "during new handshake", (unsigned)o->conn_id,
+			    c->steam_id);
+		o->state = CONN_DISCONNECT;
+	}
+}
+
+/*
  * Return 1 if car model byte is permitted in the configured carGroup.
  * Mirrors FUN_140025690:1062-1135 (exe DAT_140143e30=GT3, e38=GT4,
  * e50=GT2, e48=Cup, e40=ST; verified from exe binary wchar_t data).
@@ -2470,32 +2507,10 @@ handshake_handle(struct Server *s, struct Conn *c,
 		}
 
 		/*
-		 * Eager same-SteamID dedup, mirroring the exe
-		 * (FUN_140025690:267-279): the instant a fresh handshake is
-		 * parsed, before the ban/kick/rating/slot gates, close any
-		 * existing connection (driver OR spectator) with a matching
-		 * SteamID.  accd's quick-reconnect below only covers live
-		 * driver slots after the gates, so a stale spectator or
-		 * rejected-rejoin socket would otherwise linger until the
-		 * passive UDP reaper.  Mark the old conn dead only; the driver
-		 * slot reclaim stays with the quick-reconnect (car_id untouched).
+		 * Other connections with this steam id are left alone until
+		 * the handshake is accepted (handshake_close_same_steam).
 		 */
-		if (steam_buf[0] != '\0') {
-			int dj;
-			for (dj = 0; dj < ACC_MAX_CARS; dj++) {
-				struct Conn *o = s->conns[dj];
-				if (o == NULL || o == c)
-					continue;
-				if (strcmp(o->steam_id, steam_buf) != 0)
-					continue;
-				log_info("closing old connection %u for "
-				    "SteamId %s during new handshake",
-				    (unsigned)o->conn_id, steam_buf);
-				o->state = CONN_DISCONNECT;
-			}
-			snprintf(c->steam_id, sizeof(c->steam_id), "%s",
-			    steam_buf);
-		}
+		snprintf(c->steam_id, sizeof(c->steam_id), "%s", steam_buf);
 
 		/* Ban check. */
 		if (bans_contains(&s->bans, steam_buf)) {
@@ -2555,6 +2570,7 @@ handshake_handle(struct Server *s, struct Conn *c,
 		/* Spectator exit: ban/kick/full-server passed, skip car slot. */
 		if (c->is_spectator) {
 			c->car_id = -1;
+			handshake_close_same_steam(s, c);
 			c->state = CONN_AUTH;
 			c->authenticated_once = 1;
 			free(first); free(last); free(sname);
@@ -2666,10 +2682,11 @@ handshake_handle(struct Server *s, struct Conn *c,
 		/*
 		 * Quick-reconnect detection (FUN_140025690 in accServer.exe,
 		 * logs "Removed connection due to (quick) reconnect").  If an
-		 * already-authenticated peer has this steam_id, detach it
-		 * from its car slot and mark the old conn for drop, then
-		 * bind the new conn to that same slot so the driver's
-		 * race state and grid position survive the reconnect.
+		 * already-authenticated peer has this steam_id, bind the new
+		 * conn to its car slot so the driver's race state and grid
+		 * position survive the reconnect. The old conn keeps the
+		 * slot until handshake_close_same_steam detaches and closes
+		 * it at post_slot_assignment.
 		 * Done before the unsafeRejoin race-phase gate so returning
 		 * drivers can always rejoin.
 		 */
@@ -2702,18 +2719,13 @@ handshake_handle(struct Server *s, struct Conn *c,
 					 * its reconnect lookup on steam id and
 					 * car model (FUN_140025690), so a
 					 * driver back in another car gets a new
-					 * car. The old conn is already marked
-					 * for disconnect above and frees its
+					 * car. The old conn is closed once the
+					 * handshake is accepted and frees its
 					 * slot when it is dropped.
 					 */
 					if (!oc->entry_item &&
 					    oc->car_model != cmodel)
 						continue;
-					log_info("Removed connection due to "
-					    "(quick) reconnect: conn=%u "
-					    "for %s",
-					    (unsigned)old->conn_id,
-					    steam_buf);
 					reconnect_slot = old->car_id;
 					{
 						int rdj;
@@ -2730,8 +2742,6 @@ handshake_handle(struct Server *s, struct Conn *c,
 							}
 						}
 					}
-					old->car_id = -1;
-					old->state = CONN_DISCONNECT;
 					break;
 				}
 
@@ -2820,26 +2830,6 @@ handshake_handle(struct Server *s, struct Conn *c,
 					reject_a = cmodel;
 					reject_b = s->cars[reconnect_slot]
 					    .forced_car_model;
-					/*
-					 * The live-reconnect match above
-					 * already detached the prior conn from
-					 * this slot (car_id=-1), so conn_drop
-					 * will not clear cars[].used.  Release
-					 * it here so a rejected reconnect does
-					 * not orphan the slot (used=1 with no
-					 * owner); the driver's preserved data
-					 * still allows a later correct-car
-					 * reclaim via the zombie path.
-					 */
-					{
-						struct CarEntry *rc =
-						    &s->cars[reconnect_slot];
-
-						if (rc->used) {
-							rc->used = 0;
-							rc->left_ms = mono_ms();
-						}
-					}
 					free(first); free(last); free(sname);
 					free(steam); free(team);
 					goto reply;
@@ -3086,6 +3076,8 @@ handshake_handle(struct Server *s, struct Conn *c,
 		}
 
 post_slot_assignment:
+		/* Every gate passed: the older connections can go. */
+		handshake_close_same_steam(s, c);
 		/* Re-claim the slot on the used flag in case this was a
 		 * zombie reclaim (conn_drop clears .used so the slot can
 		 * be reallocated; reclaim must flip it back so the rest

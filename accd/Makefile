@@ -257,6 +257,7 @@ test: ${PROG} ${UNITTESTS}
 	tests/test_standings
 	python3 tests/smoke_car_reuse.py
 	python3 tests/smoke_chat_length.py
+	python3 tests/smoke_duplicate_handshake.py
 	python3 tests/smoke_empty_reset.py
 	python3 tests/smoke_handshake.py
 	python3 tests/smoke_reject_codes.py

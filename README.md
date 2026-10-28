@@ -77,6 +77,14 @@
   alive and after the inactive-peer sweep removes it.  Outside the
   entry list a driver must come back in the same car model to be
   recognized, as in the exe; another model joins as a new car.
+- **A rejected handshake never drops a connected driver.**  The old
+  connection with the same Steam ID is closed only once the new
+  handshake has passed every join check (password, ban, kick,
+  ratings, session, car group, entry list, car slots).  This departs
+  from the exe on purpose: it closes the old connection as soon as it
+  reads the Steam ID, which the client sends unverified, so anyone
+  could knock a driver off by sending a handshake with that driver's
+  Steam ID and a wrong password.
 - **Departed cars stay in the event** with their car id and laps, so
   a returning driver picks them up again and a new driver never
   inherits them.  A departed car is listed in a session's results when

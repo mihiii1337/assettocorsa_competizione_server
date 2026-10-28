@@ -477,3 +477,8 @@ dropped after 30 seconds so port scanners cannot pin the
 session-start gate.
 A legitimate client sends its first handshake byte within
 milliseconds, well under the timeout.
+.Pp
+A handshake carrying the Steam ID of a connected driver closes that
+driver's connection only once it has passed every join check, so a
+rejected handshake, such as one with a wrong password, leaves the
+driver connected.
