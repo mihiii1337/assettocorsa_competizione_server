@@ -11,7 +11,14 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(__file__))
-from fake_client import Reader, build_handshake, recv_all_frames, recv_framed, write_cfg, wstr_a  # noqa: E402
+from fake_client import (
+    Reader,
+    build_handshake,
+    recv_all_frames,
+    recv_framed,
+    write_cfg,
+    wstr_a,
+)
 
 
 def free_port(kind):
@@ -27,14 +34,19 @@ def main():
         write_cfg(tmp, tcp_port, udp_port)
         with open(os.path.join(tmp, "server.log"), "wb") as log:
             proc = subprocess.Popen(
-                [os.path.abspath("accd"), tmp], cwd=tmp, stdout=log,
-                stderr=subprocess.STDOUT, start_new_session=True,
+                [os.path.abspath("accd"), tmp],
+                cwd=tmp,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
             )
             try:
                 deadline = time.monotonic() + 5
                 while True:
                     try:
-                        sock = socket.create_connection(("127.0.0.1", tcp_port), timeout=0.2)
+                        sock = socket.create_connection(
+                            ("127.0.0.1", tcp_port), timeout=0.2
+                        )
                         break
                     except OSError:
                         if proc.poll() is not None or time.monotonic() > deadline:
@@ -79,11 +91,19 @@ def main():
                     print("rows_after_cooldown=" + str(later))
                     if persisted == 0:
                         log.flush()
-                        with open(os.path.join(tmp, "server.log"), "r", errors="replace") as f:
+                        with open(
+                            os.path.join(tmp, "server.log"), "r", errors="replace"
+                        ) as f:
                             for line in f:
                                 if "report" in line.lower() or "CHAT" in line:
                                     print("server_diagnostic=" + line.strip()[:200])
-                    return 0 if persisted == 1 and later == 2 and "Please wait before reporting again" in ack_text else 1
+                    return (
+                        0
+                        if persisted == 1
+                        and later == 2
+                        and "Please wait before reporting again" in ack_text
+                        else 1
+                    )
             finally:
                 if proc.poll() is None:
                     os.killpg(proc.pid, signal.SIGTERM)
