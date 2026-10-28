@@ -478,6 +478,10 @@ dropped after 30 seconds so port scanners cannot pin the
 session-start gate.
 A legitimate client sends its first handshake byte within
 milliseconds, well under the timeout.
+An address may hold only two such connections at a time; a further
+connect from it is closed at once, so one host cannot fill
+.Va maxConnections
+with idle sockets.
 .Pp
 A handshake carrying the Steam ID of a connected driver closes that
 driver's connection only once it has passed every join check, so a

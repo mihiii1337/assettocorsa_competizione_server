@@ -109,6 +109,9 @@
   sends the handshake is dropped after 30 s.  Without the reaper a
   single port scan could pin the session-start gate and trip the
   public lobby's delist filter.
+  An address may also hold only two such sockets at a time; a third
+  is closed at once, so idle connects from one host cannot fill
+  `maxConnections`.
 
 ### Session management
 

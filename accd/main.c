@@ -78,6 +78,7 @@
 #define POLL_SLOTS	(ACC_MAX_CARS + 5)	/* tcp + udp + lan + stdin + conns */
 #define TICK_INTERVAL_US	3000	/* 333 Hz, matching exe CreateTimerQueueTimer(3) */
 #define CONN_UNAUTH_TIMEOUT_MS	30000	/* reap silent TCP scanners */
+#define CONN_UNAUTH_PER_IP	2	/* pending handshakes per address */
 #define SHUTDOWN_FLUSH_MS	500	/* longest wait for the shutdown notice */
 
 volatile sig_atomic_t g_stop;
@@ -153,6 +154,27 @@ setup_signals(void)
 
 /* ----- per-fd handlers ------------------------------------------- */
 
+/*
+ * Connections from this address that have not completed a handshake.
+ * A real client or monitor sends its first message right after the
+ * connect, so more than a couple in flight means idle sockets holding
+ * slots that other drivers need.
+ */
+static int
+unauth_from(const struct Server *s, const struct sockaddr_in *from)
+{
+	int i, n = 0;
+
+	for (i = 0; i < ACC_MAX_CARS; i++) {
+		const struct Conn *c = s->conns[i];
+
+		if (c != NULL && c->state == CONN_UNAUTH &&
+		    c->peer.sin_addr.s_addr == from->sin_addr.s_addr)
+			n++;
+	}
+	return n;
+}
+
 static void
 handle_tcp_accept(struct Server *s)
 {
@@ -165,6 +187,13 @@ handle_tcp_accept(struct Server *s)
 	if (cfd < 0) {
 		if (errno != EINTR && errno != EAGAIN)
 			log_warn("accept: %s", strerror(errno));
+		return;
+	}
+	if (unauth_from(s, &from) >= CONN_UNAUTH_PER_IP) {
+		log_warn("accept: %s:%u has %d pending handshakes, closing",
+		    inet_ntoa(from.sin_addr), ntohs(from.sin_port),
+		    CONN_UNAUTH_PER_IP);
+		close(cfd);
 		return;
 	}
 	{
