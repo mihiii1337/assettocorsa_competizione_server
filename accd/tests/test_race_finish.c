@@ -1,8 +1,9 @@
 /*
  * Race overtime finish order: a lapped car crossing the line before
  * the leader keeps racing, the leader finishes on its crossing and
- * the lapped car then finishes on its next one.  Driven through the
- * real 0x21 lap handler.
+ * the lapped car then finishes on its next one. A finished car
+ * crossing again must not end overtime while another car is still
+ * racing. Driven through the real 0x21 lap handler and session tick.
  */
 
 #define _POSIX_C_SOURCE 200809L
@@ -16,6 +17,7 @@
 
 #include "handlers.h"
 #include "io.h"
+#include "session.h"
 #include "state.h"
 
 /* Defined in main.c, which the unit tests do not link. */
@@ -66,6 +68,7 @@ add_car(struct Server *s, int idx, int laps, int pos)
 	car->race.lap_count = laps;
 	car->race.position = (int16_t)pos;
 	car->race.on_track = 1;
+	car->rt.last_moved_ms = mono_ms();
 	return c;
 }
 
@@ -100,6 +103,7 @@ main(void)
 	s->session.ts[6] = now + 135000;
 	s->session.phase = PHASE_OVERTIME;
 	s->session.overtime_hold = 1;
+	s->session.cars_in_overtime = 2;
 	s->session.overtime_leader_armed = 1;
 	leader = add_car(s, 0, 10, 1);
 	lapped = add_car(s, 1, 9, 2);
@@ -109,9 +113,16 @@ main(void)
 	    "lapped car finished before the leader");
 	cross(s, leader);
 	expect(s->cars[0].race.finished, "leader not finished");
+	cross(s, leader);
+	session_tick(s);
+	expect(s->session.overtime_hold,
+	    "second leader crossing ended overtime early");
 	cross(s, lapped);
 	expect(s->cars[1].race.finished,
 	    "lapped car not finished after the leader");
+	session_tick(s);
+	expect(!s->session.overtime_hold,
+	    "overtime kept open after every car finished");
 
 	conn_drop(s, leader);
 	conn_drop(s, lapped);

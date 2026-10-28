@@ -1424,30 +1424,22 @@ session_tick(struct Server *s)
 }
 
 /*
- * Called from the lap completion handler when a car finishes
- * a lap during overtime.  Decrements the cars-in-overtime
- * counter; when it reaches 0, releases the overtime hold
- * and adjusts ts[5] to let the phase advance.
+ * Called from the lap handler when a race car finishes during
+ * overtime. Only the leader matters here: the hold itself is
+ * released by the per-tick scan in session_tick once no unfinished
+ * car is still racing, as in the exe (FUN_14002f710 phase 6).
+ * Counting finishers here instead let a car crossing the line twice
+ * release the hold while others were still on track.
  */
 void
 session_overtime_car_finished(struct Server *s, int car_id)
 {
-	uint64_t now;
-	int leader_just_finished = 0;
+	uint64_t now, grace;
 
-	if (!s->session.overtime_hold)
+	if (!s->session.overtime_hold || !session_is_race(s))
 		return;
-	/*
-	 * Quali tracks its eligible-car count via session_quali_drop_eligibility,
-	 * which decrements cars_in_overtime once per car that uses its right
-	 * to finish.  If we also decrement here on every Quali lap completion
-	 * the counter collapses ~2x as fast as expected and the hold releases
-	 * before the rest of the eligible field has crossed.
-	 */
-	if (!session_is_race(s))
+	if (car_id < 0 || car_id >= ACC_MAX_CARS)
 		return;
-
-	now = mono_ms();
 
 	/*
 	 * Leader-finish one-shot (SM+0x262, exe FUN_14012ed70): when the
@@ -1455,44 +1447,20 @@ session_overtime_car_finished(struct Server *s, int car_id)
 	 * post_race_s.  This fires only once (the arm flag is cleared so
 	 * subsequent finishers don't reset ts[6] further out).
 	 */
-	if (s->session.overtime_leader_armed &&
-	    car_id >= 0 && car_id < ACC_MAX_CARS &&
-	    s->cars[car_id].race.position == 1) {
-		uint64_t grace = post_grace_ms(s);
-		s->session.overtime_leader_armed = 0;
-		s->session.ts[6] = now + grace;
-		/* FUN_14012ed70 resets SM+0x220 (ts[5]) to now+overtime_s
-		 * so the HUD countdown refreshes for remaining cars. */
-		s->session.ts[5] = now +
-		    (uint64_t)s->session_overtime_s * 1000ull;
-		leader_just_finished = 1;
-		log_info("overtime: leader finished, ts[5]=now+%us ts[6]=now+%llums",
-		    (unsigned)s->session_overtime_s,
-		    (unsigned long long)grace);
-	}
-
-	if (s->session.cars_in_overtime > 0)
-		s->session.cars_in_overtime--;
-	if (s->session.cars_in_overtime <= 0) {
-		/*
-		 * All remaining cars finished.  Three cases:
-		 *  - leader_just_finished=1: ts[6] was set above with grace, keep it.
-		 *  - leader_just_finished=0, armed=0: leader fired in a prior call
-		 *    and already set ts[6]=now+grace; do not overwrite.
-		 *  - leader_just_finished=0, armed=1: leader never crossed (DNF/AFK);
-		 *    collapse ts[6] to now so the session advances immediately.
-		 */
-		s->session.overtime_hold = 0;
-		s->session.ts[5] = now;
-		if (!leader_just_finished && s->session.overtime_leader_armed)
-			s->session.ts[6] = now;
-		log_info("overtime: all cars finished%s",
-		    (leader_just_finished || !s->session.overtime_leader_armed)
-		    ? ", leader grace active" : ", collapsing to now");
-	} else {
-		log_info("overtime: %d cars still racing",
-		    (int)s->session.cars_in_overtime);
-	}
+	if (!s->session.overtime_leader_armed ||
+	    s->cars[car_id].race.position != 1)
+		return;
+	now = mono_ms();
+	grace = post_grace_ms(s);
+	s->session.overtime_leader_armed = 0;
+	s->session.ts[6] = now + grace;
+	/* FUN_14012ed70 resets SM+0x220 (ts[5]) to now+overtime_s
+	 * so the HUD countdown refreshes for remaining cars. */
+	s->session.ts[5] = now +
+	    (uint64_t)s->session_overtime_s * 1000ull;
+	log_info("overtime: leader finished, ts[5]=now+%us ts[6]=now+%llums",
+	    (unsigned)s->session_overtime_s,
+	    (unsigned long long)grace);
 }
 
 /*
