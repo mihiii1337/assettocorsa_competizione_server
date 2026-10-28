@@ -199,6 +199,7 @@ UNITTESTS =	tests/test_bop \
 		tests/test_first_lap \
 		tests/test_race_finish \
 		tests/test_quali_overtime \
+		tests/test_results_dump \
 		tests/test_standings
 TESTOBJS =	${OBJS:main.o=}
 UNITTEST_LINK =	OPTLIBS=$$(${ACCD_OPTLIBS}); \
@@ -226,6 +227,9 @@ tests/test_race_finish: tests/test_race_finish.c ${TESTOBJS}
 tests/test_quali_overtime: tests/test_quali_overtime.c ${TESTOBJS}
 	@${UNITTEST_LINK}
 
+tests/test_results_dump: tests/test_results_dump.c ${TESTOBJS}
+	@${UNITTEST_LINK}
+
 tests/test_standings: tests/test_standings.c ${TESTOBJS}
 	@${UNITTEST_LINK}
 
@@ -249,6 +253,7 @@ test: ${PROG} ${UNITTESTS}
 	tests/test_first_lap
 	tests/test_race_finish
 	tests/test_quali_overtime
+	tests/test_results_dump
 	tests/test_standings
 	python3 tests/smoke_car_reuse.py
 	python3 tests/smoke_chat_length.py

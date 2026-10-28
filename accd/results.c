@@ -224,6 +224,16 @@ results_write(struct Server *s)
 	if (sidx >= s->session_count)
 		return -1;
 	st = s->sessions[sidx].session_type;
+	/*
+	 * A race that ended before its green flag has nothing to report.
+	 * The exe's dump (FUN_14001d4c0) skips it with this message, on
+	 * both of its paths: session completed and weekend reset.
+	 */
+	if (st == 10 && !s->session.green_fired) {
+		log_kunos("racePreStartTimeEnd Phase hasn't ended - will skip "
+		    "the json dump");
+		return 0;
+	}
 
 	/* Ensure results/ directory exists. */
 	snprintf(dir, sizeof(dir), "results");
