@@ -216,6 +216,7 @@ tests/test_disconnect_notify: tests/test_disconnect_notify.c ${TESTOBJS}
 test: ${PROG} ${UNITTESTS}
 	tests/test_disconnect_notify
 	python3 tests/smoke_chat_length.py
+	sh tests/test_first_lap.sh
 	python3 tests/smoke_handshake.py
 	python3 tests/smoke_reject_codes.py
 	sh tests/integration/run_welcome_trailer_walk.sh
