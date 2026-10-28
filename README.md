@@ -388,6 +388,13 @@ count** — see [How many car slots can the server advertise?](#how-many-car-slo
 If you've configured `maxCarSlots: 30` but `maxConnections: 24`,
 the server browser will show 24, not 30.
 
+SMPR monitors take their TCP connection from the same `maxConnections`
+pool as drivers, while drivers alone are capped by `maxCarSlots`.  To
+keep every car slot free while monitors are attached, set
+`maxConnections` to `maxCarSlots` plus the number of monitors, e.g.
+`maxCarSlots: 10` and `maxConnections: 11` for one dashboard.  The
+advertised slot count stays at `maxCarSlots`.
+
 </details>
 
 <details>

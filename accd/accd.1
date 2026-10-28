@@ -217,6 +217,12 @@ Cap on simultaneous SMPR observer connections; 0 disables observers
 entirely.
 SMPR observers share the same TCP port and slot pool as sim drivers,
 so a low cap protects driver slots from observer floods.
+To keep every car slot free while monitors are attached, set
+.Va maxConnections
+to
+.Va maxCarSlots
+plus the number of monitors; drivers stay capped by
+.Va maxCarSlots .
 .It Va maxMonitorsPerIp
 Default 2.
 Per-source-IP observer cap.
