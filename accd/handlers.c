@@ -137,8 +137,6 @@ h_lap_completed(struct Server *s, struct Conn *c,
 	struct ByteBuf out;
 	int i, ts_off;
 
-	(void)s;
-
 	rd_init(&r, body, len);
 	if (rd_u8(&r, &msg_id) < 0)
 		return -1;
