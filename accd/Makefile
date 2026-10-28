@@ -259,6 +259,7 @@ test: ${PROG} ${UNITTESTS}
 	python3 tests/smoke_chat_length.py
 	python3 tests/smoke_admin_redaction.py
 	python3 tests/smoke_contact_owner.py
+	python3 tests/smoke_report_cooldown.py
 	python3 tests/smoke_duplicate_handshake.py
 	python3 tests/smoke_empty_reset.py
 	python3 tests/smoke_handshake.py
