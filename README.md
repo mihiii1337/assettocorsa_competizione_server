@@ -101,7 +101,11 @@
   end-detection phase holds a session open while a non-finished car is
   still moving on track (or, in P/Q, still on track), matching the
   stock server, so a slow finisher is not cut off; a 5-minute cap stops
-  a stalled car from holding the lobby.
+  a stalled car from holding the lobby.  In a race a lapped car takes
+  the flag only after the leader has finished.  Overtime ends at the
+  latest `sessionOverTimeSeconds` after 0:00, or after the leader's
+  finish in a race, and `postRaceSeconds` / `postQualySeconds` always
+  run in full afterwards, however overtime ended.
 - **Position-based race start** — the green flag fires when the
   leader's normalised track position crosses a randomised trigger
   inside the configured green range, with no time fallback.

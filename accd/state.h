@@ -487,24 +487,17 @@ struct SessionState {
 	int		ts_valid;	/* non-zero once populated */
 	uint8_t		overtime_hold;	/* freeze phase at OVERTIME */
 	int16_t		cars_in_overtime;/* cars still finishing */
-	/*
-	 * Wall-clock at which overtime_hold was first asserted.  Used as
-	 * the anchor for the sessionOverTimeSeconds hard cap so a single
-	 * AFK car can't hold the lobby past the configured grace.  Once
-	 * (now - overtime_hold_started_ms) exceeds session_overtime_s,
-	 * the hold is force-released regardless of cars_in_overtime.
-	 */
-	uint64_t	overtime_hold_started_ms;
 	uint8_t		overtime_leader_armed;	/* SM+0x262: 1 = leader-finish
 						 * one-shot not yet fired;
 						 * exe FUN_14012ed70 fires it
 						 * once and clears the flag */
 	/*
-	 * Mirrors exe's server+0x14180 aftercare counter: when an overtime
-	 * hold releases early (not hard-stop), the phase machine jumps
-	 * immediately to PHASE_ADVANCE (ts[5]=ts[6]=now) but session_advance
-	 * is deferred until advance_at_ms.  Zero means "no deferral" (hard
-	 * stop, or race paths where ts[6] already carries the grace).
+	 * Mirrors exe's server+0x14180 aftercare counter: whenever the
+	 * overtime hold ends (overtime_close in session.c), the phase
+	 * machine jumps to PHASE_ADVANCE (ts[5]=ts[6]=now) and
+	 * session_advance is deferred until advance_at_ms. Zero means no
+	 * deferral (admin /next, or a schedule whose ts[6] already carries
+	 * the grace).
 	 */
 	uint64_t	advance_at_ms;
 

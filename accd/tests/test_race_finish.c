@@ -3,7 +3,8 @@
  * the leader keeps racing, the leader finishes on its crossing and
  * the lapped car then finishes on its next one. A finished car
  * crossing again must not end overtime while another car is still
- * racing. Driven through the real 0x21 lap handler and session tick.
+ * racing, and every way overtime ends leaves the full postRaceSeconds.
+ * Driven through the real 0x21 lap handler and session tick.
  */
 
 #define _POSIX_C_SOURCE 200809L
@@ -72,11 +73,10 @@ add_car(struct Server *s, int idx, int laps, int pos)
 	return c;
 }
 
-int
-main(void)
+static struct Server *
+race_in_overtime(void)
 {
 	struct Server *s;
-	struct Conn *leader, *lapped;
 	uint64_t now;
 	int i;
 
@@ -90,6 +90,7 @@ main(void)
 	s->sessions[0].session_type = 10;
 	s->sessions[0].duration_min = 20;
 	s->session_overtime_s = 120;
+	s->post_race_s = 15;
 
 	/* Race clock ran out, leader on lap 10, the other car a lap down. */
 	now = mono_ms();
@@ -105,9 +106,17 @@ main(void)
 	s->session.overtime_hold = 1;
 	s->session.cars_in_overtime = 2;
 	s->session.overtime_leader_armed = 1;
+	return s;
+}
+
+static void
+check_finish_order(void)
+{
+	struct Server *s = race_in_overtime();
+	struct Conn *leader, *lapped;
+
 	leader = add_car(s, 0, 10, 1);
 	lapped = add_car(s, 1, 9, 2);
-
 	cross(s, lapped);
 	expect(!s->cars[1].race.finished,
 	    "lapped car finished before the leader");
@@ -123,12 +132,50 @@ main(void)
 	session_tick(s);
 	expect(!s->session.overtime_hold,
 	    "overtime kept open after every car finished");
-
+	expect(s->session.advance_at_ms >= mono_ms() + 14000,
+	    "no postRaceSeconds after every car finished");
 	conn_drop(s, leader);
 	conn_drop(s, lapped);
 	free(s);
+}
+
+/*
+ * The leader's finish moves the deadline to its crossing plus
+ * sessionOverTimeSeconds, and reaching the deadline with a car still
+ * out closes the race with the full postRaceSeconds.
+ */
+static void
+check_deadline(void)
+{
+	struct Server *s = race_in_overtime();
+	struct Conn *leader, *other;
+	uint64_t t;
+
+	leader = add_car(s, 0, 10, 1);
+	other = add_car(s, 1, 10, 2);
+	t = mono_ms();
+	cross(s, leader);
+	expect(s->session.ts[5] >= t + 120000,
+	    "leader finish did not move the deadline");
+	expect(s->session.ts[6] == s->session.ts[5] + 15000,
+	    "aftercare not after the moved deadline");
+	s->session.ts[5] = mono_ms() - 1;
+	session_tick(s);
+	expect(!s->session.overtime_hold, "deadline did not stop the race");
+	expect(s->session.advance_at_ms >= mono_ms() + 14000,
+	    "no postRaceSeconds after the deadline");
+	conn_drop(s, leader);
+	conn_drop(s, other);
+	free(s);
+}
+
+int
+main(void)
+{
+	check_finish_order();
+	check_deadline();
 	if (failed)
 		return 1;
-	printf("PASS: lapped car takes the flag after the leader\n");
+	printf("PASS: race overtime finish order and deadline\n");
 	return 0;
 }
