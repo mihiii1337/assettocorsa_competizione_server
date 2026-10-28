@@ -653,6 +653,7 @@ struct AssistRules {
  */
 struct DriverInfo {
 	char		first_name[ACC_MAX_NAME_LEN];
+	char		second_name[ACC_MAX_NAME_LEN];	/* handshake only */
 	char		last_name[ACC_MAX_NAME_LEN];
 	char		short_name[8];
 	uint8_t		driver_category;	/* Bronze=0..Platinum=3 */

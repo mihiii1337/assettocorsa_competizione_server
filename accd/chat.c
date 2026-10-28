@@ -100,6 +100,78 @@ chat_car_by_racenum(struct Server *s, int num)
 	return -1;
 }
 
+/* Code point limit FUN_1400142f0 passes to FUN_140020700 for 0x2a. */
+#define CHAT_SENDER_MAX	35
+
+/* Byte offset of code point n in UTF-8 s, or of its NUL if shorter. */
+static size_t
+utf8_offset(const char *s, size_t n)
+{
+	size_t i;
+
+	for (i = 0; s[i] != '\0'; i++)
+		if (((unsigned char)s[i] & 0xc0) != 0x80 && n-- == 0)
+			break;
+	return i;
+}
+
+static int
+sender_too_long(const char *s)
+{
+	return s[utf8_offset(s, CHAT_SENDER_MAX)] != '\0';
+}
+
+/*
+ * Follows FUN_140020700. The exe tries, in order, first, second and
+ * last name joined by single spaces with an empty second name left
+ * out, then first and last name, then the last name alone if there
+ * is one, and keeps the first that fits in 35 code points. Failing
+ * that it cuts the last try to 32 code points and adds "...". The
+ * result is then uppercased with the C locale toupper, so only ASCII
+ * letters change.
+ *
+ * Between first and last name and last name alone the exe also tries
+ * what is meant to be an initial and the last name, but it reads the
+ * text at an offset into one of its static strings instead. Either
+ * that is too long as well and the last name wins as it does here,
+ * or it shows part of a log message, so the step is left out.
+ *
+ * Names are counted in code points, which is what the exe counts as
+ * it keeps one character per wire code point, and never cut inside
+ * a UTF-8 sequence. A driver without any name falls back to the
+ * short name, then "<anon>".
+ */
+void
+chat_sender_name(const struct DriverInfo *d, char *buf, size_t bufsz)
+{
+	size_t i;
+
+	if (bufsz == 0)
+		return;
+	if (d->first_name[0] == '\0' && d->second_name[0] == '\0' &&
+	    d->last_name[0] == '\0') {
+		snprintf(buf, bufsz, "%s", d->short_name[0] != '\0' ?
+		    d->short_name : "<anon>");
+		return;
+	}
+	if (d->second_name[0] != '\0')
+		snprintf(buf, bufsz, "%s %s %s", d->first_name,
+		    d->second_name, d->last_name);
+	else
+		snprintf(buf, bufsz, "%s %s", d->first_name, d->last_name);
+	if (sender_too_long(buf))
+		snprintf(buf, bufsz, "%s %s", d->first_name, d->last_name);
+	if (sender_too_long(buf) && d->last_name[0] != '\0')
+		snprintf(buf, bufsz, "%s", d->last_name);
+	if (sender_too_long(buf)) {
+		i = utf8_offset(buf, CHAT_SENDER_MAX - 3);
+		snprintf(buf + i, bufsz - i, "...");
+	}
+	for (i = 0; buf[i] != '\0'; i++)
+		if (buf[i] >= 'a' && buf[i] <= 'z')
+			buf[i] = (char)(buf[i] - 'a' + 'A');
+}
+
 /*
  * Build and broadcast a 0x2b chat message containing a system
  * notification (chat type 4 = info, 5 = system warning).

@@ -2353,6 +2353,7 @@ handshake_handle(struct Server *s, struct Conn *c,
 		char *steam = NULL, *team = NULL;
 		char *skip_str = NULL;
 		char steam_buf[32] = "";
+		char second_buf[ACC_MAX_NAME_LEN] = "";
 		uint8_t cat = 0;
 		uint16_t nat = 0;
 		int32_t rnum = 0;
@@ -2362,14 +2363,17 @@ handshake_handle(struct Server *s, struct Conn *c,
 		if (len > 200) {
 			/*
 			 * Real client format: 5 DriverInfo strings
-			 * (first, aux, last, aux, short), 41-byte
+			 * (first, second, last, aux, short), 41-byte
 			 * numeric block, steam_id, middle bytes,
-			 * then full CarInfo.
+			 * then full CarInfo. The second name only
+			 * feeds the chat sender name.
 			 */
 			if (rd_can_str_a(&r))
 				(void)rd_str_a(&r, &first);
-			if (rd_can_str_a(&r)) {
-				(void)rd_str_a(&r, &skip_str);
+			if (rd_can_str_a(&r) &&
+			    rd_str_a(&r, &skip_str) == 0 && skip_str != NULL) {
+				snprintf(second_buf, sizeof(second_buf),
+				    "%s", skip_str);
 				free(skip_str); skip_str = NULL;
 			}
 			if (rd_can_str_a(&r))
@@ -3130,6 +3134,9 @@ post_slot_assignment:
 			snprintf(car->drivers[matched_dj].first_name,
 			    sizeof(car->drivers[matched_dj].first_name), "%s",
 			    first);
+		snprintf(car->drivers[matched_dj].second_name,
+		    sizeof(car->drivers[matched_dj].second_name), "%s",
+		    second_buf);
 		if (last != NULL)
 			snprintf(car->drivers[matched_dj].last_name,
 			    sizeof(car->drivers[matched_dj].last_name), "%s",

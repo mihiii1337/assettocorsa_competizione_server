@@ -68,6 +68,16 @@ int	chat_prefix(const char *s, const char *p);
 int	chat_parse_int(const char *s, int *out);
 int	chat_car_by_racenum(struct Server *s, int num);
 
+/*
+ * Sender name of a relayed player chat, built from the driver's
+ * names. buf should hold CHAT_SENDER_SIZE bytes, enough for the
+ * three names and their separators.
+ */
+#define CHAT_SENDER_SIZE	(3 * ACC_MAX_NAME_LEN)
+
+void	chat_sender_name(const struct DriverInfo *d, char *buf,
+	    size_t bufsz);
+
 /* Build and broadcast a 0x2b system chat notification. */
 void	chat_broadcast(struct Server *s, const char *text, uint8_t type);
 

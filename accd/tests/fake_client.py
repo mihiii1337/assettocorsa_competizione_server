@@ -132,7 +132,8 @@ def ks_str(s):
 
 
 def build_driver_info(first="Smoke", last="Test", short="SMK",
-                     steam="S76561199000000000", category=1, nationality=0):
+                     steam="S76561199000000000", category=1, nationality=0,
+                     second=""):
     """Build DriverInfo matching FUN_14011cea0 (the ACC client's
     DriverInfo::writeToPacket): 5 fmt_a + 41 fixed bytes + 1 fmt_a.
     Field layout of the 41-byte block:
@@ -142,20 +143,20 @@ def build_driver_info(first="Smoke", last="Test", short="SMK",
     that we tolerate (hs_echo preserves the raw bytes for the
     client's reader which uses the correct offsets)."""
     buf = wstr_a(first)
-    buf += wstr_a("")                 # aux slot
+    buf += wstr_a(second)             # second name
     buf += wstr_a(last)
     buf += wstr_a("")                 # aux slot
     buf += wstr_a(short)
     # 41-byte numeric block, FUN_14011cea0 layout
-    buf += bytes([category])          # +0x00 u8 cat
-    buf += struct.pack("<H", nationality)  # +0x01 u16 nat
-    buf += bytes([0])                 # +0x03 u8
-    buf += struct.pack("<III", 0x1f7, 0x11, 0xf3)  # +0x04 3*u32
-    buf += bytes([0])                 # +0x10 u8
-    buf += struct.pack("<II", 0, 0)   # +0x11 2*u32
-    buf += struct.pack("<IIII", 200, 0x1f8, 0xf3, 0x155)  # +0x19 4*u32
-    assert len(buf) - (21 + 1 + 17 + 1 + 13) == 41, \
-        "DriverInfo block must be exactly 41 bytes"
+    blk = bytes([category])           # +0x00 u8 cat
+    blk += struct.pack("<H", nationality)  # +0x01 u16 nat
+    blk += bytes([0])                 # +0x03 u8
+    blk += struct.pack("<III", 0x1f7, 0x11, 0xf3)  # +0x04 3*u32
+    blk += bytes([0])                 # +0x10 u8
+    blk += struct.pack("<II", 0, 0)   # +0x11 2*u32
+    blk += struct.pack("<IIII", 200, 0x1f8, 0xf3, 0x155)  # +0x19 4*u32
+    assert len(blk) == 41, "DriverInfo block must be exactly 41 bytes"
+    buf += blk
     buf += wstr_a(steam)
     return buf
 

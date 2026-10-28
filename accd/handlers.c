@@ -929,7 +929,7 @@ h_chat(struct Server *s, struct Conn *c,
 	struct Reader r;
 	uint8_t msg_id;
 	char *text = NULL;
-	const char *sender;
+	char sender[CHAT_SENDER_SIZE] = "<anon>";
 	int handled;
 	int32_t client_ts_ms = 0;
 	struct ByteBuf out;
@@ -961,10 +961,10 @@ h_chat(struct Server *s, struct Conn *c,
 	 * so we capture it here for use in the broadcast below. */
 	(void)rd_i32(&r, &client_ts_ms);
 	/*
-	 * Sender: driver display name from the car_entry.  Falls back
-	 * to "BOT_N" / numeric id if the car has no driver string.
+	 * Sender: the current driver's full name, built like the exe
+	 * does for both the log line and the relay. "<anon>" if the
+	 * connection has no car or driver yet.
 	 */
-	sender = "<anon>";
 	if (c->car_id >= 0 && c->car_id < ACC_MAX_CARS &&
 	    s->cars[c->car_id].used) {
 		struct CarEntry *car = &s->cars[c->car_id];
@@ -977,9 +977,9 @@ h_chat(struct Server *s, struct Conn *c,
 		 * an arbitrary CarEntry tail field.
 		 */
 		if (idx < car->driver_count &&
-		    idx < ACC_MAX_DRIVERS_PER_CAR &&
-		    car->drivers[idx].short_name[0] != '\0')
-			sender = car->drivers[idx].short_name;
+		    idx < ACC_MAX_DRIVERS_PER_CAR)
+			chat_sender_name(&car->drivers[idx], sender,
+			    sizeof(sender));
 	}
 	log_info("CHAT %s: %s", sender, text);
 	/* accweb regex: ^CHAT (.*?): (.*)$  -- stdout plain form */

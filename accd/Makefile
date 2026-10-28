@@ -192,7 +192,8 @@ probe: probe.c
 
 # Unit tests: each tests/<name>.c is linked against every object but
 # main.o, with the same flags and libraries as accd itself.
-UNITTESTS =	tests/test_disconnect_notify \
+UNITTESTS =	tests/test_chat_sender \
+		tests/test_disconnect_notify \
 		tests/test_first_lap \
 		tests/test_race_finish \
 		tests/test_quali_overtime
@@ -200,6 +201,9 @@ TESTOBJS =	${OBJS:main.o=}
 UNITTEST_LINK =	OPTLIBS=$$(${ACCD_OPTLIBS}); \
 		${CC} ${ACCD_CFLAGS} ${CFLAGS} -I. ${ACCD_LDFLAGS} ${LDFLAGS} \
 		    -o $@ $@.c ${TESTOBJS} ${ACCD_LIBS} $$OPTLIBS ${LIBS}
+
+tests/test_chat_sender: tests/test_chat_sender.c ${TESTOBJS}
+	@${UNITTEST_LINK}
 
 tests/test_disconnect_notify: tests/test_disconnect_notify.c ${TESTOBJS}
 	@${UNITTEST_LINK}
@@ -226,6 +230,7 @@ tests/test_quali_overtime: tests/test_quali_overtime.c ${TESTOBJS}
 #     any of the 11 sections to EOF (this is what flagged the 84 B
 #     TrackConditions overrun the smoke test alone missed)
 test: ${PROG} ${UNITTESTS}
+	tests/test_chat_sender
 	tests/test_disconnect_notify
 	tests/test_first_lap
 	tests/test_race_finish
