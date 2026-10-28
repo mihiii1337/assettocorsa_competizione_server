@@ -1384,6 +1384,8 @@ int	server_alloc_car(struct Server *s);
 int	server_car_slot(const struct Server *s, uint16_t car_id);
 /* Count used car slots = "drivers present" (excludes carless spectators). */
 int	server_used_car_count(const struct Server *s);
+/* Car is ranked: connected, or departed with a lap this session. */
+int	car_in_standings(const struct CarEntry *car);
 
 /*
  * Pick the next grid slot for a joining car: max existing +1 if

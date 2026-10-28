@@ -198,7 +198,8 @@ UNITTESTS =	tests/test_bop \
 		tests/test_disconnect_notify \
 		tests/test_first_lap \
 		tests/test_race_finish \
-		tests/test_quali_overtime
+		tests/test_quali_overtime \
+		tests/test_standings
 TESTOBJS =	${OBJS:main.o=}
 UNITTEST_LINK =	OPTLIBS=$$(${ACCD_OPTLIBS}); \
 		${CC} ${ACCD_CFLAGS} ${CFLAGS} -I. ${ACCD_LDFLAGS} ${LDFLAGS} \
@@ -225,6 +226,9 @@ tests/test_race_finish: tests/test_race_finish.c ${TESTOBJS}
 tests/test_quali_overtime: tests/test_quali_overtime.c ${TESTOBJS}
 	@${UNITTEST_LINK}
 
+tests/test_standings: tests/test_standings.c ${TESTOBJS}
+	@${UNITTEST_LINK}
+
 # Smoke test: spin up accd with a synthetic config, send
 # ACP_REQUEST_CONNECTION variants, verify:
 #   - the 0x0b welcome trailer has the expected size and tail
@@ -245,6 +249,7 @@ test: ${PROG} ${UNITTESTS}
 	tests/test_first_lap
 	tests/test_race_finish
 	tests/test_quali_overtime
+	tests/test_standings
 	python3 tests/smoke_car_reuse.py
 	python3 tests/smoke_chat_length.py
 	python3 tests/smoke_handshake.py

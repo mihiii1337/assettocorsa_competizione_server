@@ -671,6 +671,23 @@ server_used_car_count(const struct Server *s)
 }
 
 /*
+ * A car is in the standings while it is connected, and after its
+ * driver left as long as it has a lap or best lap in the session. The
+ * exe keeps a departed car in its timing vector and ranks it with the
+ * others (FUN_140127d80; FUN_14001c300 only clears the connected
+ * byte). A slot that did not drive this session has nothing to rank,
+ * session_reset zeroes its race state.
+ */
+int
+car_in_standings(const struct CarEntry *car)
+{
+	if (car->driver_count == 0)
+		return 0;
+	return car->used || car->race.lap_count > 0 ||
+	    car->race.best_lap_ms > 0;
+}
+
+/*
  * Active grid-position assignment per FUN_140021090.  Scan every
  * used car, find the maximum assigned grid number, and return
  * max+1 if it still fits under max_connections.  Otherwise walk

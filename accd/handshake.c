@@ -705,8 +705,7 @@ write_session_leaderboard_section(struct ByteBuf *bb, struct Server *s,
 		 * Truly empty slots (never connected this session) have both
 		 * zeroed by session_reset and are skipped.
 		 */
-		if (session_idx < 0 && !s->cars[j].used &&
-		    r->lap_count == 0 && r->best_lap_ms == 0)
+		if (session_idx < 0 && !car_in_standings(&s->cars[j]))
 			continue;
 		nc++;
 	}
@@ -752,10 +751,8 @@ write_session_leaderboard_section(struct ByteBuf *bb, struct Server *s,
 				 * one that drove at least one lap or posted a
 				 * best time — the same guard used for nc above.
 				 */
-				if (session_idx < 0 && !s->cars[j].used &&
-				    (src == NULL ||
-				    (src->lap_count == 0 &&
-				    src->best_lap_ms == 0)))
+				if (session_idx < 0 &&
+				    !car_in_standings(&s->cars[j]))
 					continue;
 				if (src == NULL || src->position != pos)
 					continue;
@@ -775,10 +772,8 @@ write_session_leaderboard_section(struct ByteBuf *bb, struct Server *s,
 			 * Mirror the counting loop: same disconnected-car
 			 * skip condition as above and as nc's scan.
 			 */
-			if (session_idx < 0 && !s->cars[j].used &&
-			    (src == NULL ||
-			    (src->lap_count == 0 &&
-			    src->best_lap_ms == 0)))
+			if (session_idx < 0 &&
+			    !car_in_standings(&s->cars[j]))
 				continue;
 			if (src == NULL)
 				continue;

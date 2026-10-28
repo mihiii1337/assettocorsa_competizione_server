@@ -900,11 +900,6 @@ cmp_cars(const struct Server *s, const struct CarEntry *a,
 	const struct CarRaceState *ra = &a->race;
 	const struct CarRaceState *rb = &b->race;
 
-	if (!a->used)
-		return 1;
-	if (!b->used)
-		return -1;
-
 	/*
 	 * DQ'd cars always sort last regardless of lap count.
 	 * Mirrors the first key of both FUN_140120970 (race) and
@@ -992,6 +987,13 @@ cmp_cars(const struct Server *s, const struct CarEntry *a,
 	return 0;
 }
 
+/*
+ * Rank every car in the standings, a departed car with a lap included,
+ * as the exe ranks its whole timing vector whether a car is connected
+ * or not. Leaving departed cars out kept their last position, which
+ * then collided with the position of a connected car. A car outside
+ * the standings has no position.
+ */
 void
 session_recompute_standings(struct Server *s)
 {
@@ -999,8 +1001,10 @@ session_recompute_standings(struct Server *s)
 	int n = 0, i, j;
 
 	for (i = 0; i < ACC_MAX_CARS && i < s->max_connections; i++) {
-		if (s->cars[i].used)
+		if (car_in_standings(&s->cars[i]))
 			order[n++] = i;
+		else
+			s->cars[i].race.position = 0;
 	}
 	for (i = 1; i < n; i++) {
 		int key = order[i];

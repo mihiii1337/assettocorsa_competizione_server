@@ -206,23 +206,6 @@ results_laps_free(struct Server *s)
 	s->results_lap_overflow = 0;
 }
 
-/*
- * A car gets a leaderBoardLines row while it is connected, or after
- * it left if it has a lap or best lap in this session, the rule the
- * live leaderboard follows (FUN_140034a40, write_session_leaderboard_
- * section). A departed car keeps its slot and identity for the rest
- * of the event, and session_reset zeroes its race state, so without
- * the second half every later session would list it as an empty row.
- */
-static int
-results_has_row(const struct CarEntry *car)
-{
-	if (car->driver_count == 0)
-		return 0;
-	return car->used || car->race.lap_count > 0 ||
-	    car->race.best_lap_ms > 0;
-}
-
 int
 results_write(struct Server *s)
 {
@@ -356,7 +339,7 @@ results_write(struct Server *s)
 	 * the position the standings sort assigned (unset/0 trails).
 	 */
 	for (i = 0; i < ACC_MAX_CARS && i < s->max_connections; i++)
-		if (results_has_row(&s->cars[i]))
+		if (car_in_standings(&s->cars[i]))
 			order[ord_n++] = i;
 	for (oi = 1; oi < ord_n; oi++) {
 		int key = order[oi];
