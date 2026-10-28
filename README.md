@@ -624,6 +624,9 @@ cd accd
 ```
 
 Stop with `Ctrl-C`, `quit` at the console, or `kill -TERM <pid>`.
+Connected drivers get a "Server is shutting down" notice first; accd
+waits at most 500 ms for it to reach them before closing their
+connections.  The stock server sends nothing on shutdown.
 
 ### Firewall / ports
 

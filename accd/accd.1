@@ -62,6 +62,18 @@ Protocol messages are logged with hex dumps.
 .It Fl V
 Print the version string and exit.
 .El
+.Pp
+On
+.Dv SIGINT ,
+.Dv SIGTERM
+or the console
+.Ic quit
+command,
+.Nm
+sends connected drivers a
+.Dq Server is shutting down
+notice and waits at most 500 ms for it to reach them before it closes
+their connections and exits.
 .Sh CONFIGURATION
 .Nm
 reads four JSON files from the configuration directory:

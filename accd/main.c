@@ -64,6 +64,7 @@
 #include "console.h"
 #include "dispatch.h"
 #include "bcast.h"
+#include "chat.h"
 #include "io.h"
 #include "lan.h"
 #include "log.h"
@@ -77,6 +78,7 @@
 #define POLL_SLOTS	(ACC_MAX_CARS + 5)	/* tcp + udp + lan + stdin + conns */
 #define TICK_INTERVAL_US	3000	/* 333 Hz, matching exe CreateTimerQueueTimer(3) */
 #define CONN_UNAUTH_TIMEOUT_MS	30000	/* reap silent TCP scanners */
+#define SHUTDOWN_FLUSH_MS	500	/* longest wait for the shutdown notice */
 
 volatile sig_atomic_t g_stop;
 
@@ -85,6 +87,46 @@ on_signal(int sig)
 {
 	(void)sig;
 	g_stop = 1;
+}
+
+/*
+ * Tell the drivers the server is going away before server_free closes
+ * their connections. The stock server sends nothing on shutdown; the
+ * notice reuses the sender and chat type of its own "you will be
+ * disconnected" warning (FUN_140029eb0). A client whose socket buffer
+ * is full gets up to SHUTDOWN_FLUSH_MS to take the queued notice, then
+ * server_free closes it anyway.
+ */
+static void
+notify_shutdown(struct Server *s)
+{
+	struct pollfd pfd[ACC_MAX_CARS];
+	uint64_t deadline, now;
+	nfds_t n;
+	int i;
+
+	chat_broadcast_as(s, "Server", "Server is shutting down, you will "
+	    "be disconnected", 4);
+	deadline = mono_ms() + SHUTDOWN_FLUSH_MS;
+	for (;;) {
+		n = 0;
+		for (i = 0; i < ACC_MAX_CARS; i++) {
+			struct Conn *c = s->conns[i];
+
+			if (c != NULL && conn_drain_tx(c) == 1) {
+				pfd[n].fd = c->fd;
+				pfd[n].events = POLLOUT;
+				pfd[n].revents = 0;
+				n++;
+			}
+		}
+		now = mono_ms();
+		if (n == 0 || now >= deadline)
+			return;
+		if (poll(pfd, n, (int)(deadline - now)) == -1 &&
+		    errno != EINTR)
+			return;
+	}
 }
 
 static void
@@ -625,6 +667,7 @@ main(int argc, char **argv)
 	}
 
 	log_info("accd shutting down");
+	notify_shutdown(&srv);
 	ratings_save(&srv);
 	console_close();
 	if (srv.lan_fd >= 0)
