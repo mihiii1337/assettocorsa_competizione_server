@@ -401,6 +401,43 @@ h_sector_split_bulk(struct Server *s, struct Conn *c,
 	return 0;
 }
 
+/*
+ * isSessionOver for the lap car idx just completed (lap-states bit
+ * 0x0400), as exe FUN_14012b380 decides it. Outside a race the lap
+ * is flagged once the session reaches the overtime grace window. In
+ * a race a car that already finished stays finished and, from
+ * overtime on, a car on the leader's lap finishes while a lapped car
+ * follows the leader's finished latch, so it never takes the flag
+ * before the leader. The exe compares lap counts as they were before
+ * this lap was recorded, so the crossing car counts with laps_before.
+ */
+static int
+lap_session_over(const struct Server *s, int idx, uint32_t laps_before)
+{
+	uint32_t leader_laps = laps_before;
+	int leader_finished = 0;
+	int k;
+
+	if (!session_is_race(s))
+		return s->session.phase >= PHASE_OVERTIME;
+	if (s->cars[idx].race.finished)
+		return 1;
+	if (s->session.phase < PHASE_OVERTIME)
+		return 0;
+	for (k = 0; k < ACC_MAX_CARS; k++) {
+		const struct CarEntry *ce = &s->cars[k];
+
+		if (k != idx && ce->driver_count > 0 &&
+		    (uint32_t)ce->race.lap_count > leader_laps) {
+			leader_laps = (uint32_t)ce->race.lap_count;
+			leader_finished = ce->race.finished;
+		}
+	}
+	if (laps_before >= leader_laps)
+		return 1;
+	return leader_finished;
+}
+
 /* ----- 0x21 ACP_SECTOR_SPLIT (single) -> broadcast 0x3b ---------- */
 
 int
@@ -410,6 +447,7 @@ h_sector_split_single(struct Server *s, struct Conn *c,
 	struct Reader r;
 	uint8_t msg_id, flag_b, flag_d;
 	int32_t split_time, lap_time;
+	uint32_t laps_before;
 	uint16_t car_field;
 	struct ByteBuf out;
 
@@ -436,6 +474,7 @@ h_sector_split_single(struct Server *s, struct Conn *c,
 	 */
 	if ((car_field & 0x0400) != 0)
 		return 0;
+	laps_before = (uint32_t)s->cars[c->car_id].race.lap_count;
 	{
 		struct CarRaceState *race = &s->cars[c->car_id].race;
 		/*
@@ -813,13 +852,15 @@ h_sector_split_single(struct Server *s, struct Conn *c,
 
 		if (s->session.phase == PHASE_OVERTIME) {
 			/*
-			 * Crossing S/F during overtime is a race finish: mark
-			 * the car so the phase-6 end-detection hold no longer
-			 * waits on it (exe car+0x1d1 bit 0x04).
+			 * A lap that ends the session for this car finishes
+			 * it, so the phase-6 end detection no longer waits on
+			 * it (exe car+0x1d1 bit 0x04). A lapped race car
+			 * crossing before the leader keeps racing.
 			 */
-			if (c->car_id >= 0 && c->car_id < ACC_MAX_CARS)
+			if (lap_session_over(s, c->car_id, laps_before)) {
 				s->cars[c->car_id].race.finished = 1;
-			session_overtime_car_finished(s, c->car_id);
+				session_overtime_car_finished(s, c->car_id);
+			}
 			session_quali_drop_eligibility(s, c->car_id);
 		}
 	}
@@ -836,54 +877,16 @@ h_sector_split_single(struct Server *s, struct Conn *c,
 	{
 		uint32_t split_wire = (uint32_t)split_time;
 		/*
-		 * isSessionOver (lap-states bit 0x0400): exe FUN_14012b380
-		 * sets it per car, not as a flat phase gate.  The exe caller
-		 * (FUN_1400142f0) passes param_7 = (5 < exe_phase_level); the
-		 * exe 7-level model maps level 5 = accd PHASE_SESSION (4),
-		 * level 6 = accd PHASE_OVERTIME (5), level 7 = PHASE_COMPLETED
-		 * (6), so exe "level > 5" == accd "phase >= PHASE_OVERTIME".
-		 * Non-race flags the lap once the session reaches the overtime
-		 * grace window (>= PHASE_OVERTIME).  Race flags a car that
-		 * already finished (race.finished mirrors the exe's car+0x1d1
-		 * latch) and, from overtime on, any car still running on the
-		 * leader's lap.
+		 * isSessionOver (lap-states bit 0x0400) is set per car, see
+		 * lap_session_over. The exe caller (FUN_1400142f0) passes
+		 * param_7 = (5 < exe_phase_level); the exe 7-level model maps
+		 * level 5 = accd PHASE_SESSION (4), level 6 = accd
+		 * PHASE_OVERTIME (5), level 7 = PHASE_COMPLETED (6), so exe
+		 * "level > 5" == accd "phase >= PHASE_OVERTIME".
 		 */
 		uint16_t relay_cf = car_field;
-		if (session_is_race(s)) {
-			int sess_over = s->cars[c->car_id].race.finished;
-			if (!sess_over &&
-			    s->session.phase >= PHASE_OVERTIME) {
-				uint32_t leader_laps = 0;
-				int leader_finished = 0;
-				int k;
-				for (k = 0; k < ACC_MAX_CARS; k++) {
-					const struct CarEntry *ce =
-					    &s->cars[k];
-					if (ce->driver_count > 0 &&
-					    (uint32_t)ce->race.lap_count >
-					    leader_laps) {
-						leader_laps = (uint32_t)
-						    ce->race.lap_count;
-						leader_finished =
-						    ce->race.finished;
-					}
-				}
-				if ((uint32_t)s->cars[c->car_id].race.lap_count
-				    >= leader_laps)
-					sess_over = 1;
-				else
-					/*
-					 * Lapped-down car: exe FUN_14012b380:31
-					 * copies the leader's finished latch into
-					 * isSessionOver instead of leaving it 0.
-					 */
-					sess_over = leader_finished;
-			}
-			if (sess_over)
-				relay_cf |= 0x0400;
-		} else if (s->session.phase >= PHASE_OVERTIME) {
+		if (lap_session_over(s, c->car_id, laps_before))
 			relay_cf |= 0x0400;
-		}
 		int ts_off, i;
 		bb_init(&out);
 		if (wr_u8(&out, SRV_SECTOR_SPLIT_RELAY) < 0 ||

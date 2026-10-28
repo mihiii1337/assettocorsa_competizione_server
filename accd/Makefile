@@ -193,7 +193,8 @@ probe: probe.c
 # Unit tests: each tests/<name>.c is linked against every object but
 # main.o, with the same flags and libraries as accd itself.
 UNITTESTS =	tests/test_disconnect_notify \
-		tests/test_first_lap
+		tests/test_first_lap \
+		tests/test_race_finish
 TESTOBJS =	${OBJS:main.o=}
 UNITTEST_LINK =	OPTLIBS=$$(${ACCD_OPTLIBS}); \
 		${CC} ${ACCD_CFLAGS} ${CFLAGS} -I. ${ACCD_LDFLAGS} ${LDFLAGS} \
@@ -203,6 +204,9 @@ tests/test_disconnect_notify: tests/test_disconnect_notify.c ${TESTOBJS}
 	@${UNITTEST_LINK}
 
 tests/test_first_lap: tests/test_first_lap.c ${TESTOBJS}
+	@${UNITTEST_LINK}
+
+tests/test_race_finish: tests/test_race_finish.c ${TESTOBJS}
 	@${UNITTEST_LINK}
 
 # Smoke test: spin up accd with a synthetic config, send
@@ -220,6 +224,7 @@ tests/test_first_lap: tests/test_first_lap.c ${TESTOBJS}
 test: ${PROG} ${UNITTESTS}
 	tests/test_disconnect_notify
 	tests/test_first_lap
+	tests/test_race_finish
 	python3 tests/smoke_chat_length.py
 	python3 tests/smoke_handshake.py
 	python3 tests/smoke_reject_codes.py
