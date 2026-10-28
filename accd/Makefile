@@ -73,32 +73,29 @@ ACCD_LDFLAGS =	-L/usr/local/lib -pie \
 		-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack
 ACCD_LIBS =	-lm
 
+# Optional libraries, probed with the same flags as the real link:
+# libiconv when iconv is not in libc, libbsd for arc4random_uniform
+# and libseccomp when present. Expands to a shell command printing
+# the flags, shared by the accd link and the unit tests. The include
+# lines are written as \043 because a literal # would start a make
+# comment; the trailing true keeps sh -e happy when the last probe
+# fails.
+ACCD_PROBE =	${CC} ${ACCD_CFLAGS} ${CFLAGS} ${ACCD_LDFLAGS} ${LDFLAGS} \
+		-x c - -o /dev/null
+ACCD_OPTLIBS =	printf '\043include <iconv.h>\nint main(){iconv_t c=iconv_open("","");iconv_close(c);return 0;}\n' \
+		    | ${ACCD_PROBE} 2>/dev/null || echo -liconv; \
+		printf '\043include <bsd/stdlib.h>\nint main(){arc4random_uniform(1);return 0;}\n' \
+		    | ${ACCD_PROBE} -lbsd 2>/dev/null && echo -lbsd; \
+		printf '\043include <seccomp.h>\nint main(){scmp_filter_ctx c=seccomp_init(0);seccomp_release(c);return 0;}\n' \
+		    | ${ACCD_PROBE} -lseccomp 2>/dev/null && echo -lseccomp; \
+		true
+
 all: ${PROG}
 
 ${PROG}: ${OBJS}
-	@ICONV=; \
-	if ! printf '%s\n%s\n' '#include <iconv.h>' \
-	    'int main(){iconv_t c=iconv_open("","");iconv_close(c);return 0;}' \
-	    | ${CC} ${ACCD_CFLAGS} ${CFLAGS} ${ACCD_LDFLAGS} ${LDFLAGS} \
-	    -x c - -o /dev/null 2>/dev/null; then \
-	    ICONV="-liconv"; \
-	fi; \
-	BSD=; \
-	if printf '%s\n%s\n' '#include <bsd/stdlib.h>' \
-	    'int main(){arc4random_uniform(1);return 0;}' \
-	    | ${CC} ${ACCD_CFLAGS} ${CFLAGS} ${ACCD_LDFLAGS} ${LDFLAGS} \
-	    -x c - -o /dev/null -lbsd 2>/dev/null; then \
-	    BSD="-lbsd"; \
-	fi; \
-	SECCOMP=; \
-	if printf '%s\n%s\n' '#include <seccomp.h>' \
-	    'int main(){scmp_filter_ctx c=seccomp_init(0);seccomp_release(c);return 0;}' \
-	    | ${CC} ${ACCD_CFLAGS} ${CFLAGS} ${ACCD_LDFLAGS} ${LDFLAGS} \
-	    -x c - -o /dev/null -lseccomp 2>/dev/null; then \
-	    SECCOMP="-lseccomp"; \
-	fi; \
-	echo ${CC} ${ACCD_LDFLAGS} ${LDFLAGS} -o ${PROG} ${OBJS} ${ACCD_LIBS} $$ICONV $$BSD $$SECCOMP ${LIBS}; \
-	${CC} ${ACCD_LDFLAGS} ${LDFLAGS} -o ${PROG} ${OBJS} ${ACCD_LIBS} $$ICONV $$BSD $$SECCOMP ${LIBS}
+	@OPTLIBS=$$(${ACCD_OPTLIBS}); \
+	echo ${CC} ${ACCD_LDFLAGS} ${LDFLAGS} -o ${PROG} ${OBJS} ${ACCD_LIBS} $$OPTLIBS ${LIBS}; \
+	${CC} ${ACCD_LDFLAGS} ${LDFLAGS} -o ${PROG} ${OBJS} ${ACCD_LIBS} $$OPTLIBS ${LIBS}
 
 # main.o embeds ACCD_VERSION_STR via -DACCD_VERSION_STR=... defined
 # in ACCD_CFLAGS at make-invocation time, so it has to rebuild when
