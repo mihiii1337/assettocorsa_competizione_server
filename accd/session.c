@@ -1263,8 +1263,8 @@ session_tick(struct Server *s)
 			 * A car is eligible if it is on track, not pitting,
 			 * and has not yet cut this lap.  Eligibility is
 			 * dropped when the car crosses S/F (session_quali_
-			 * drop_eligibility) or when the car goes to the pits
-			 * without finishing (still_racing check above).
+			 * drop_eligibility). The per-tick scan below ends the
+			 * hold once no unfinished car is still on track.
 			 */
 			const char *stype = def->session_type == 4
 			    ? "quali" : "practice";
@@ -1336,19 +1336,19 @@ session_tick(struct Server *s)
 	 * releases.  Handles crashes, disconnects, and long pit stops
 	 * without requiring a lap completion to decrement a counter.
 	 *
-	 * Quali and other session types fall back to the approximate
-	 * lap_count + !in_pit check (handled via the eligibility set).
+	 * Practice and qualifying use the non-race test of the same
+	 * function. In every session type a car that already finished
+	 * (exe car+0x1d1 bit 0x04, any lap completed in overtime outside
+	 * a race) no longer holds the session, even if it stays on track.
 	 */
 	if (s->session.overtime_hold) {
 		int i, still_racing = 0;
 		for (i = 0; i < ACC_MAX_CARS && i < s->max_connections;
 		    i++) {
 			struct CarEntry *car = &s->cars[i];
-			if (!car->used)
+			if (!car->used || car->race.finished)
 				continue;
 			if (session_is_race(s)) {
-				if (car->race.finished)
-					continue;
 				if (car->rt.last_moved_ms > 0 &&
 				    now - car->rt.last_moved_ms <=
 				    300000ull)

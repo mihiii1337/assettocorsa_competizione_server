@@ -194,7 +194,8 @@ probe: probe.c
 # main.o, with the same flags and libraries as accd itself.
 UNITTESTS =	tests/test_disconnect_notify \
 		tests/test_first_lap \
-		tests/test_race_finish
+		tests/test_race_finish \
+		tests/test_quali_overtime
 TESTOBJS =	${OBJS:main.o=}
 UNITTEST_LINK =	OPTLIBS=$$(${ACCD_OPTLIBS}); \
 		${CC} ${ACCD_CFLAGS} ${CFLAGS} -I. ${ACCD_LDFLAGS} ${LDFLAGS} \
@@ -207,6 +208,9 @@ tests/test_first_lap: tests/test_first_lap.c ${TESTOBJS}
 	@${UNITTEST_LINK}
 
 tests/test_race_finish: tests/test_race_finish.c ${TESTOBJS}
+	@${UNITTEST_LINK}
+
+tests/test_quali_overtime: tests/test_quali_overtime.c ${TESTOBJS}
 	@${UNITTEST_LINK}
 
 # Smoke test: spin up accd with a synthetic config, send
@@ -225,6 +229,7 @@ test: ${PROG} ${UNITTESTS}
 	tests/test_disconnect_notify
 	tests/test_first_lap
 	tests/test_race_finish
+	tests/test_quali_overtime
 	python3 tests/smoke_chat_length.py
 	python3 tests/smoke_handshake.py
 	python3 tests/smoke_reject_codes.py
