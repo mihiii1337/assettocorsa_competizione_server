@@ -818,7 +818,7 @@ struct Conn {
 	struct sockaddr_in
 			peer;
 	enum conn_state	state;
-	uint8_t		authenticated_once; /* accepted game client, even after teardown begins */
+	uint8_t		authenticated_once; /* reached AUTH, kept in teardown */
 	uint16_t	conn_id;	/* server-assigned, also "carIndex" */
 	int32_t		car_id;		/* index into server.cars[], -1 if spectator */
 	char		steam_id[32];	/* parsed at handshake; drives the eager

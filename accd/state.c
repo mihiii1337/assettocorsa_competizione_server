@@ -377,11 +377,13 @@ conn_new(struct Server *s, int fd, const struct sockaddr_in *peer)
 void
 conn_drop(struct Server *s, struct Conn *c)
 {
+	int was_authenticated;
+
 	if (c == NULL)
 		return;
 
 	/* A kick or failed send may already have entered DISCONNECT. */
-	int was_authenticated = c->state == CONN_AUTH || c->authenticated_once;
+	was_authenticated = c->state == CONN_AUTH || c->authenticated_once;
 
 	/*
 	 * Notify any attached SMPR monitors that this conn is going

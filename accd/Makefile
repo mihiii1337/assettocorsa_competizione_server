@@ -190,6 +190,17 @@ weather.o: weather.c io.h log.h msg.h prim.h state.h lobby.h weather.h
 probe: probe.c
 	${CC} ${ACCD_CFLAGS} ${CFLAGS} ${ACCD_LDFLAGS} ${LDFLAGS} -o probe probe.c
 
+# Unit tests: each tests/<name>.c is linked against every object but
+# main.o, with the same flags and libraries as accd itself.
+UNITTESTS =	tests/test_disconnect_notify
+TESTOBJS =	${OBJS:main.o=}
+UNITTEST_LINK =	OPTLIBS=$$(${ACCD_OPTLIBS}); \
+		${CC} ${ACCD_CFLAGS} ${CFLAGS} -I. ${ACCD_LDFLAGS} ${LDFLAGS} \
+		    -o $@ $@.c ${TESTOBJS} ${ACCD_LIBS} $$OPTLIBS ${LIBS}
+
+tests/test_disconnect_notify: tests/test_disconnect_notify.c ${TESTOBJS}
+	@${UNITTEST_LINK}
+
 # Smoke test: spin up accd with a synthetic config, send
 # ACP_REQUEST_CONNECTION variants, verify:
 #   - the 0x0b welcome trailer has the expected size and tail
@@ -202,15 +213,15 @@ probe: probe.c
 #     spectator) the way the AC2 client does, catching size drift in
 #     any of the 11 sections to EOF (this is what flagged the 84 B
 #     TrackConditions overrun the smoke test alone missed)
-test: ${PROG}
+test: ${PROG} ${UNITTESTS}
+	tests/test_disconnect_notify
 	python3 tests/smoke_chat_length.py
-	sh tests/test_disconnect_notify.sh
 	python3 tests/smoke_handshake.py
 	python3 tests/smoke_reject_codes.py
 	sh tests/integration/run_welcome_trailer_walk.sh
 
 clean:
-	rm -f ${PROG} ${OBJS} probe
+	rm -f ${PROG} ${OBJS} ${UNITTESTS} probe
 
 PREFIX ?=	/usr/local
 DESTDIR ?=

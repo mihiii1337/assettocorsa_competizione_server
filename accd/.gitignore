@@ -1,2 +1,4 @@
 accd
 *.o
+tests/test_*
+!tests/test_*.c

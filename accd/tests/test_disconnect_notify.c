@@ -1,55 +1,93 @@
+/*
+ * conn_drop must send the 0x24 car disconnect to the remaining
+ * clients for every driver that was accepted, including one whose
+ * connection was already in CONN_DISCONNECT (kick, ban, send failure),
+ * and stay silent for a connection rejected before it was accepted.
+ */
+
 #define _POSIX_C_SOURCE 200809L
-#include <assert.h>
+
+#include <sys/socket.h>
+
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/socket.h>
+#include <string.h>
 #include <unistd.h>
-#include "state.h"
-#include "msg.h"
-volatile sig_atomic_t g_stop = 0;
 
-static void check(int authenticated, int disconnect_state, int should_notify)
+#include "msg.h"
+#include "state.h"
+
+/* Defined in main.c, which the unit tests do not link. */
+volatile sig_atomic_t g_stop;
+
+static int failed;
+
+static void
+check(const char *what, enum conn_state state, int accepted, int notify)
 {
-    struct Server *s = calloc(1, sizeof(*s));
-    struct sockaddr_in peer = {0};
-    struct Conn *watcher, *leaving;
-    unsigned char msg[5];
-    int pair[2];
-    assert(s != NULL);
-    server_init(s);
-    s->max_connections = 4;
-    assert(socketpair(AF_UNIX, SOCK_STREAM, 0, pair) == 0);
-    assert(fcntl(pair[1], F_SETFL, O_NONBLOCK) == 0);
-    watcher = conn_new(s, pair[0], &peer);
-    assert(watcher != NULL);
-    watcher->state = CONN_AUTH;
-    leaving = conn_new(s, -1, &peer);
-    assert(leaving != NULL);
-    leaving->state = disconnect_state ? CONN_DISCONNECT : CONN_AUTH;
-    leaving->authenticated_once = authenticated;
-    leaving->car_id = 0;
-    s->cars[0].used = 1;
-    s->cars[0].car_id = ACC_CAR_ID_BASE;
-    conn_drop(s, leaving);
-    ssize_t received = read(pair[1], msg, sizeof(msg));
-    if (should_notify) {
-        assert(received == 5);
-        assert(msg[0] == 3 && msg[2] == SRV_CAR_DISCONNECT_NOTIFY);
-    } else {
-        assert(received == -1 && (errno == EAGAIN || errno == EWOULDBLOCK));
-    }
-    conn_drop(s, watcher);
-    close(pair[1]);
-    free(s);
+	struct Server *s;
+	struct Conn *watcher, *leaving;
+	struct sockaddr_in peer;
+	unsigned char msg[8];
+	ssize_t n;
+	int sv[2];
+
+	if ((s = calloc(1, sizeof(*s))) == NULL) {
+		perror("calloc");
+		exit(1);
+	}
+	server_init(s);
+	s->max_connections = 4;
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == -1 ||
+	    fcntl(sv[1], F_SETFL, O_NONBLOCK) == -1) {
+		perror("socketpair");
+		exit(1);
+	}
+	memset(&peer, 0, sizeof(peer));
+	watcher = conn_new(s, sv[0], &peer);
+	leaving = conn_new(s, -1, &peer);
+	if (watcher == NULL || leaving == NULL) {
+		fprintf(stderr, "conn_new failed\n");
+		exit(1);
+	}
+	watcher->state = CONN_AUTH;
+	leaving->state = state;
+	leaving->authenticated_once = (uint8_t)accepted;
+	leaving->car_id = 0;
+	s->cars[0].used = 1;
+	s->cars[0].car_id = ACC_CAR_ID_BASE;
+
+	conn_drop(s, leaving);
+	n = read(sv[1], msg, sizeof(msg));
+	if (notify) {
+		if (n != 5 || msg[0] != 3 || msg[1] != 0 ||
+		    msg[2] != SRV_CAR_DISCONNECT_NOTIFY ||
+		    (msg[3] | msg[4] << 8) != ACC_CAR_ID_BASE) {
+			fprintf(stderr, "FAIL: %s: no 0x24 for car %d\n",
+			    what, ACC_CAR_ID_BASE);
+			failed = 1;
+		}
+	} else if (n != -1 || (errno != EAGAIN && errno != EWOULDBLOCK)) {
+		fprintf(stderr, "FAIL: %s: unexpected %zd bytes\n", what, n);
+		failed = 1;
+	}
+
+	conn_drop(s, watcher);
+	close(sv[1]);
+	free(s);
 }
-int main(void)
+
+int
+main(void)
 {
-    check(0, 0, 1); /* still authenticated */
-    check(1, 1, 1); /* kicked or failed send */
-    check(0, 1, 0); /* failed before authentication */
-    puts("PASS: disconnect notices survive teardown without notifying for rejected joins");
-    return 0;
+	check("authenticated driver", CONN_AUTH, 1, 1);
+	check("driver already in teardown", CONN_DISCONNECT, 1, 1);
+	check("rejected before accept", CONN_DISCONNECT, 0, 0);
+	if (failed)
+		return 1;
+	printf("PASS: car disconnect sent for every accepted driver\n");
+	return 0;
 }
